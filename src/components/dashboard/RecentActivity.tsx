@@ -1,33 +1,57 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-const transactions = [
-  { id: 1, name: "Emeka O.", type: "Received", amount: "+$50.00", date: "Today, 9:41 AM", avatar: "E" },
-  { id: 2, name: "Netflix", type: "Subscription", amount: "-$15.99", date: "Yesterday", avatar: "N" },
-  { id: 3, name: "Chioma A.", type: "Sent", amount: "-$120.00", date: "Oct 24", avatar: "C" },
+// Scalable Data Interface
+interface Transaction {
+  id: string;
+  name: string;
+  type: "Received" | "Sent" | "Subscription" | "Deposit";
+  amount: number;
+  currency: string;
+  date: string;
+  initials: string;
+}
+
+// Mock Data (simulating API response)
+const transactions: Transaction[] = [
+  { id: "tx_1", name: "Emeka O.", type: "Received", amount: 50.00, currency: "USD", date: "Today, 9:41 AM", initials: "EO" },
+  { id: "tx_2", name: "Netflix", type: "Subscription", amount: -15.99, currency: "USD", date: "Yesterday", initials: "N" },
+  { id: "tx_3", name: "Chioma A.", type: "Sent", amount: -120.00, currency: "USD", date: "Oct 24", initials: "CA" },
 ];
 
 export default function RecentActivity() {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between px-2">
-        <h3 className="font-bold text-lg text-slate-900">Recent Activity</h3>
-        <button className="text-sm text-purple-600 font-medium">See all</button>
+    <div className="mt-8 space-y-4"> {/* Added margin top */}
+      <div className="flex items-center justify-between px-1">
+        <h3 className="font-bold text-lg text-slate-900 dark:text-white">Recent Activity</h3>
+        <button className="text-sm text-purple-600 hover:text-purple-500 font-medium transition-colors">
+          See all
+        </button>
       </div>
 
       <div className="space-y-3">
         {transactions.map((tx) => (
-          <div key={tx.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+          <div 
+            key={tx.id} 
+            className="
+              flex items-center justify-between p-4 
+              bg-white dark:bg-slate-900 
+              rounded-2xl border border-slate-100 dark:border-slate-800 
+              shadow-sm hover:border-slate-200 dark:hover:border-slate-700 transition-colors
+            "
+          >
             <div className="flex items-center gap-4">
-              <Avatar className="h-12 w-12 border-2 border-white shadow-sm">
-                <AvatarFallback className="bg-slate-100 text-slate-600 font-bold">{tx.avatar}</AvatarFallback>
+              <Avatar className="h-10 w-10 border border-slate-100 dark:border-slate-700">
+                <AvatarFallback className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs">
+                  {tx.initials}
+                </AvatarFallback>
               </Avatar>
               <div>
-                <p className="font-bold text-slate-900">{tx.name}</p>
-                <p className="text-xs text-slate-500">{tx.type} • {tx.date}</p>
+                <p className="font-bold text-sm text-slate-900 dark:text-white">{tx.name}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{tx.type} • {tx.date}</p>
               </div>
             </div>
-            <span className={`font-bold ${tx.amount.startsWith("+") ? "text-green-600" : "text-slate-900"}`}>
-              {tx.amount}
+            <span className={`font-bold text-sm ${tx.amount > 0 ? 'text-green-600 dark:text-green-400' : 'text-slate-900 dark:text-white'}`}>
+              {tx.amount > 0 ? '+' : ''}{tx.amount.toFixed(2)}
             </span>
           </div>
         ))}
