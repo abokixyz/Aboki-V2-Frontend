@@ -12,18 +12,27 @@ export default function Dashboard() {
   const { setTheme, theme } = useTheme();
 
   return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20 transition-colors duration-500">
+    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20 transition-colors duration-300">
       
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-5 sticky top-0 bg-slate-50/90 dark:bg-slate-950/90 backdrop-blur-md z-20">
         
-        {/* Logo */}
-        <div className="relative h-6 w-24">
+        {/* Dynamic Logo Switching */}
+        <div className="relative h-8 w-32">
+          {/* Light Mode Logo (Visible by default, hidden in dark mode) */}
           <Image 
-            src="/Logo lockup.svg" 
+            src="/LogoLight.svg" 
             alt="Aboki Logo" 
             fill 
-            className="object-contain object-left dark:invert" 
+            className="object-contain object-left dark:hidden" 
+            priority
+          />
+          {/* Dark Mode Logo (Hidden by default, visible in dark mode) */}
+          <Image 
+            src="/LogoDark.svg" 
+            alt="Aboki Logo" 
+            fill 
+            className="object-contain object-left hidden dark:block" 
             priority
           />
         </div>
@@ -35,7 +44,7 @@ export default function Dashboard() {
             <span className="text-xs font-bold">120 pts</span>
           </button>
 
-          {/* Theme Toggle - Fixed Animation & Alignment */}
+          {/* Theme Toggle */}
           <button 
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             className="relative w-9 h-9 flex items-center justify-center rounded-full text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
