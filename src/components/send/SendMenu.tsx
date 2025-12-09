@@ -36,10 +36,11 @@ export default function SendMenu() {
             No account needed to receive.
           </p>
           
-          <button className="w-full py-4 rounded-xl bg-[#D364DB] border-2 border-slate-900 text-white font-bold shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.8)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] dark:hover:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.8)] transition-all flex items-center justify-center gap-2">
+          <Link href="/send/link" className="w-full"><button className="w-full py-4 rounded-xl bg-[#D364DB] border-2 border-slate-900 text-white font-bold shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.8)] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] dark:hover:shadow-[2px_2px_0px_0px_rgba(255,255,255,0.8)] transition-all flex items-center justify-center gap-2">
             <LinkIcon className="w-5 h-5" />
             Send via link
           </button>
+          </Link>
         </div>
 
         <div className="relative flex items-center py-2">
