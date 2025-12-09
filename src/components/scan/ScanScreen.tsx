@@ -1,9 +1,3 @@
-#!/bin/bash
-
-# Create directory if not exi
-mkdir -p src/components/scan
-
-cat << 'EOF' > src/components/scan/ScanScreen.tsx
 "use client"
 
 import { useState, useEffect } from "react";
@@ -128,4 +122,3 @@ export default function ScanScreen() {
     </div>
   );
 }
-EOF
