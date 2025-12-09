@@ -12,16 +12,15 @@ export default function Dashboard() {
   const { setTheme, theme } = useTheme();
 
   return (
-    // Outer wrapper for full screen background
-    <div className="min-h-screen bg-slate-50 dark:bg-black flex justify-center">
+    // Outer Wrapper: Matches the lavender tint perfectly
+    <div className="min-h-screen bg-[#F6EDFF]/50 dark:bg-black flex justify-center">
       
-      {/* App Container: Constrained width, centered, white background */}
-      <main className="w-full max-w-[1080px] min-h-screen bg-[slate]-50 dark:bg-slate-950 pb-20 transition-colors duration-300  overflow-hidden">
+      {/* Main Container: No shadow, matching background */}
+      <main className="w-full max-w-[1080px] min-h-screen bg-[#F6EDFF]/50 dark:bg-slate-950 pb-20 transition-colors duration-300 overflow-hidden">
         
-        {/* Header */}
-        <header className="flex items-center justify-between px-6 py-5 sticky top-0 bg-slate-50/90 dark:bg-slate-950/90 backdrop-blur-md z-20">
+        {/* Header - Transparent/Blurry matching the theme */}
+        <header className="flex items-center justify-between px-6 py-5 sticky top-0 bg-[#F6EDFF]/80 dark:bg-slate-950/90 backdrop-blur-md z-20">
           
-          {/* Dynamic Logo */}
           <div className="relative h-8 w-32">
             <Image src="/LogoLight.svg" alt="Aboki Logo" fill className="object-contain object-left dark:hidden" priority />
             <Image src="/LogoDark.svg" alt="Aboki Logo" fill className="object-contain object-left hidden dark:block" priority />
@@ -48,7 +47,6 @@ export default function Dashboard() {
           </div>
         </header>
 
-        {/* Body Content */}
         <div className="px-6 mt-6 flex flex-col gap-6">
           <div className="space-y-4">
             <BalanceCard />

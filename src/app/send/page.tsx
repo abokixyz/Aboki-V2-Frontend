@@ -2,7 +2,8 @@ import SendMenu from "@/components/send/SendMenu";
 
 export default function Page() {
   return (
-    <div className="min-h-screen bg-[#FDFBF7] dark:bg-black flex justify-center">
+    // Updated Background
+    <div className="min-h-screen bg-[#F6EDFF]/50 dark:bg-black flex justify-center">
       <SendMenu />
     </div>
   );
