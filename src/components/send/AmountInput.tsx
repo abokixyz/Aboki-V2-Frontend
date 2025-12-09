@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { 
   ChevronLeftIcon, 
   ChevronUpIcon, 
@@ -11,23 +12,26 @@ import {
 
 const MOCK_BALANCE = 7517.49;
 
-export default function AmountInput() {
+// We wrap the main logic in a component to handle SearchParams safely
+function AmountInputContent() {
+  const searchParams = useSearchParams();
+  // READ DATA: Get dynamic values or fallback to defaults
+  const username = searchParams.get("username") || "@unknown";
+  const avatar = searchParams.get("avatar") || "?";
+
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
 
-  // Helper to format display
   const formatAmount = (val: string) => {
     if (!val) return "";
     return val.replace(/[^\d.]/g, "");
   };
 
-  // Check if balance is exceeded
   const isOverBalance = useMemo(() => {
     const val = parseFloat(amount || "0");
     return val > MOCK_BALANCE;
   }, [amount]);
 
-  // Helper to increment/decrement
   const adjustAmount = (delta: number) => {
     const current = parseFloat(amount || "0");
     const newValue = Math.max(0, current + delta).toFixed(0); 
@@ -43,7 +47,6 @@ export default function AmountInput() {
       
       {/* Header */}
       <header className="px-6 py-6 relative flex items-center justify-center">
-        {/* Back Button - Positioned Absolute Left */}
         <Link 
           href="/send/contacts" 
           className="absolute left-6 p-3 -ml-3 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors z-10"
@@ -51,13 +54,12 @@ export default function AmountInput() {
           <ChevronLeftIcon className="w-6 h-6 text-slate-900 dark:text-white" />
         </Link>
         
-        {/* Centralized, Larger Recipient Pill with Pulse */}
+        {/* DYNAMIC RECIPIENT DISPLAY */}
         <div className="flex items-center gap-3 bg-white dark:bg-slate-900 px-5 py-2.5 rounded-full border-2 border-slate-100 dark:border-slate-800 shadow-sm">
           <div className="relative">
             <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-sm font-bold text-purple-600">
-              E
+              {avatar}
             </div>
-            {/* Live Action Pulse */}
             <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500 border-2 border-white dark:border-slate-900"></span>
@@ -65,22 +67,19 @@ export default function AmountInput() {
           </div>
           <div className="flex flex-col items-start leading-none">
             <span className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-0.5">Sending to</span>
-            <span className="text-sm font-bold text-slate-900 dark:text-white">@emeka</span>
+            <span className="text-sm font-bold text-slate-900 dark:text-white">{username}</span>
           </div>
         </div>
       </header>
 
       <div className="flex-1 flex flex-col items-center justify-center px-6 -mt-10">
         
-        {/* Currency Label */}
         <span className="text-slate-400 font-bold tracking-widest text-sm mb-6">
           USD AMOUNT
         </span>
 
         {/* Input Wrapper */}
         <div className="relative flex items-center justify-center gap-6 mb-2">
-          
-          {/* Main Display */}
           <div className="flex items-center relative">
              <span className={`text-6xl md:text-8xl font-bold tracking-tighter transition-colors ${amount ? (isOverBalance ? 'text-red-500' : 'text-slate-900 dark:text-white') : 'text-slate-300 dark:text-slate-700'}`}>
                 $
@@ -95,7 +94,6 @@ export default function AmountInput() {
              />
           </div>
 
-          {/* Custom Counters */}
           <div className="flex flex-col gap-3">
             <button 
               onClick={() => adjustAmount(1)}
@@ -112,7 +110,6 @@ export default function AmountInput() {
           </div>
         </div>
 
-        {/* Balance & Error Context */}
         <div className="h-8 flex flex-col items-center justify-center">
           {isOverBalance ? (
             <span className="text-red-500 font-bold animate-pulse">
@@ -125,7 +122,6 @@ export default function AmountInput() {
           )}
         </div>
 
-        {/* Quick Actions */}
         <div className="flex gap-3 mt-8">
           {["5", "10", "50"].map((val) => (
             <button 
@@ -144,7 +140,6 @@ export default function AmountInput() {
           </button>
         </div>
 
-        {/* Description Field */}
         <div className="w-full max-w-xs mt-8 relative">
           <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
             <PencilSquareIcon className="h-5 w-5 text-slate-400" />
@@ -160,9 +155,11 @@ export default function AmountInput() {
 
       </div>
 
-      {/* Review Button Area */}
       <div className="p-6">
-        <Link href={!amount || isOverBalance ? "#" : "/send/review"}>
+        {/* Pass data to next screen too! */}
+        <Link 
+          href={!amount || isOverBalance ? "#" : `/send/review?username=${username}&amount=${amount}&note=${note}`}
+        >
           <button 
             disabled={!amount || isOverBalance}
             className="w-full py-4 rounded-2xl bg-[#D364DB] text-white font-bold text-lg shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.8)] hover:-translate-y-1 hover:shadow-[2px_2px_0px_0px_rgba(15,23,42,1)] active:translate-y-0 active:shadow-none transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
@@ -173,5 +170,14 @@ export default function AmountInput() {
       </div>
 
     </div>
+  );
+}
+
+// Wrap in Suspense to prevent Next.js build errors with useSearchParams
+export default function AmountInput() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <AmountInputContent />
+    </Suspense>
   );
 }
