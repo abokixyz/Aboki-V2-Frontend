@@ -10,7 +10,7 @@ const bricolage = Bricolage_Grotesque({
 });
 
 export const metadata: Metadata = {
-  title: "Aboki",
+  title: "Aboki | Web3 Wallet",
   description: "Web3 Wallet for Nigeria",
   icons: {
     icon: "/abokiicon.svg", 

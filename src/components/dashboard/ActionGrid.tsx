@@ -7,21 +7,24 @@ import {
 
 export default function ActionGrid() {
   const actions = [
-    { label: "Send", icon: PaperAirplaneIcon, color: "bg-pink-500 text-white" },
-    { label: "Add", icon: PlusIcon, color: "bg-white text-black border border-gray-200" },
-    { label: "Withdraw", icon: ArrowDownTrayIcon, color: "bg-white text-black border border-gray-200" },
-    { label: "Request", icon: QrCodeIcon, color: "bg-purple-100 text-purple-600" },
+    { label: "Send", icon: PaperAirplaneIcon, color: "text-pink-500" },
+    { label: "Receive", icon: QrCodeIcon, color: "text-purple-500" },
+    { label: "Add", icon: PlusIcon, color: "text-blue-500" },
+    { label: "Withdraw", icon: ArrowDownTrayIcon, color: "text-orange-500" },
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-3 my-6">
+    <div className="grid grid-cols-2 gap-3 my-6">
       {actions.map((action) => (
-        <div key={action.label} className="flex flex-col items-center gap-2 group cursor-pointer">
-          <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center shadow-sm transition-transform group-hover:scale-105 ${action.color}`}>
-            <action.icon className="w-7 h-7 -rotate-45" />
+        <button 
+          key={action.label} 
+          className="flex items-center gap-3 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm transition-all hover:border-slate-200 hover:shadow-md active:scale-[0.98]"
+        >
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center bg-slate-50 ${action.color}`}>
+            <action.icon className="w-5 h-5 -rotate-45" />
           </div>
-          <span className="text-xs font-medium text-slate-600">{action.label}</span>
-        </div>
+          <span className="font-bold text-slate-900">{action.label}</span>
+        </button>
       ))}
     </div>
   );
