@@ -23,7 +23,7 @@ export default function RecentActivity() {
     <div className="mt-8 space-y-4"> {/* Added margin top */}
       <div className="flex items-center justify-between px-1">
         <h3 className="font-bold text-lg text-slate-900 dark:text-white">Recent Activity</h3>
-        <button className="text-sm text-purple-600 hover:text-purple-500 font-medium transition-colors">
+        <Link href="/activity" className="text-sm text-purple-600 hover:text-purple-500 font-medium transition-colors">
           See all
         </button>
       </div>

@@ -1,9 +1,3 @@
-#!/bin/bash
-
-# Create directory if not exi
-mkdir -p src/components/add
-
-cat << 'EOF' > src/components/add/AddCashInput.tsx
 "use client"
 
 import { useState, useMemo } from "react";
@@ -148,15 +142,3 @@ export default function AddCashInput() {
     </div>
   );
 }
-EOF
-
-
-mkdir -p src/app/add
-
-cat << 'EOF' > src/app/add/page.tsx
-import AddCashInput from "@/components/add/AddCashInput";
-
-export default function Page() {
-  return <AddCashInput />;
-}
-EOF
