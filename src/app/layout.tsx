@@ -1,15 +1,13 @@
-
 import type { Metadata } from "next";
 import { Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
-import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
 import BottomNav from "@/components/layout/BottomNav";
 
-// 1. Configure the font
+// 1. Configure the font with Next.js optimization
 const bricolage = Bricolage_Grotesque({
   subsets: ["latin"],
-  variable: "--font-bricolage", // This variable name must match tailwind.config.ts
+  variable: "--font-bricolage", // Must match tailwind config
   display: "swap",
 });
 
@@ -25,11 +23,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={cn(
-        // 2. Inject the font variable into the body
-        "min-h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] font-sans antialiased transition-colors duration-300", 
-        bricolage.variable
-      )}>
+      <body className={`min-h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] font-sans antialiased transition-colors duration-300 ${bricolage.variable}`}>
         <ThemeProvider
             attribute="class"
             defaultTheme="system"

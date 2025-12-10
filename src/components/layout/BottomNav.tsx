@@ -19,13 +19,14 @@ import {
 export default function BottomNav() {
   const pathname = usePathname();
 
-  // Hide Nav on the active Scan camera view
-  if (pathname === "/scan") return null;
+  // Hide Nav on Scan + Auth Screens
+  const hiddenRoutes = ["/scan", "/login", "/signup", "/username", "/passkey"];
+  if (hiddenRoutes.includes(pathname)) return null;
 
   const navItems = [
     { label: "Home", href: "/", icon: HomeIcon, activeIcon: HomeSolid },
     { label: "Rewards", href: "/rewards", icon: GiftIcon, activeIcon: GiftSolid },
-    { label: "SCAN", href: "/scan", isFloating: true }, // Middle Button
+    { label: "SCAN", href: "/scan", isFloating: true },
     { label: "Support", href: "/support", icon: ChatBubbleLeftRightIcon, activeIcon: ChatSolid },
     { label: "Profile", href: "/profile", icon: UserIcon, activeIcon: UserSolid },
   ];
@@ -33,14 +34,9 @@ export default function BottomNav() {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pointer-events-none">
       <div className="w-full max-w-[1080px] pointer-events-auto">
-        
-        {/* Glass Container */}
         <nav className="relative bg-white/90 dark:bg-[#3d3d3d]/90 backdrop-blur-xl border-t border-slate-200 dark:border-[#A3A3A3] pb-6 pt-2 px-6 shadow-2xl rounded-t-[2.5rem]">
-          
           <ul className="flex items-center justify-between">
             {navItems.map((item) => {
-              
-              // 1. BIG SCAN BUTTON (Floating)
               if (item.isFloating) {
                 return (
                   <li key="scan" className="relative -top-10">
@@ -52,11 +48,8 @@ export default function BottomNav() {
                   </li>
                 );
               }
-
-              // 2. Standard Tabs with Animation
               const isActive = pathname === item.href;
               const Icon = isActive ? item.activeIcon : item.icon;
-
               return (
                 <li key={item.label} className="relative">
                   <Link href={item.href} className="flex flex-col items-center gap-1 p-2 group">
@@ -66,8 +59,6 @@ export default function BottomNav() {
                     <span className={`text-[10px] font-bold transition-all duration-300 ${isActive ? 'text-[#D364DB] opacity-100' : 'text-slate-400 dark:text-gray-400 opacity-80'}`}>
                       {item.label}
                     </span>
-                    
-                    {/* Active Indicator Dot */}
                     <span className={`absolute -bottom-1 w-1 h-1 rounded-full bg-[#D364DB] transition-all duration-300 ${isActive ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}`} />
                   </Link>
                 </li>
