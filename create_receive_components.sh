@@ -21,10 +21,10 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
         {/* Background Blob */}
         <div className="absolute w-[500px] h-[500px] bg-purple-200/50 dark:bg-purple-900/20 rounded-full blur-3xl -z-10 animate-pulse" />
 
-        {/* Bouncing Logo (Real SVG + High Energy Animation) */}
+        {/* Bouncing Logo (CIRCLE SHAPE) */}
         <div className="relative w-32 h-32 md:w-48 md:h-48 mb-8 animate-bounce-active">
-          <div className="w-full h-full bg-[#D364DB] rounded-[2rem] flex items-center justify-center shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,0.9)] transform rotate-3 overflow-hidden p-6">
-             {/* Real Logo Image */}
+          {/* Updated: rounded-full for circle shape */}
+          <div className="w-full h-full bg-[#D364DB] rounded-full flex items-center justify-center shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,0.9)] transform rotate-3 overflow-hidden p-6">
              <div className="relative w-full h-full">
                <Image 
                  src="/abokiicon.svg" 
@@ -69,94 +69,66 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
   );
 }
 EOF
-
-cat << 'EOF' > src/components/auth/PasskeySetup.tsx
+cat << 'EOF' > src/components/auth/Onboarding.tsx
 "use client"
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FingerPrintIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
-import { ChevronLeftIcon } from "@heroicons/react/24/outline";
+import { ArrowRightIcon, CheckIcon } from "@heroicons/react/24/outline";
 import AuthLayout from "./AuthLayout";
 
-export default function PasskeySetup() {
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-
-  const handleCreatePasskey = () => {
-    setLoading(true);
-    // Simulate WebAuthn/Coinbase SDK delay
-    setTimeout(() => {
-      // Navigate to Home (Dashboard) after "success"
-      router.push("/");
-    }, 2000);
-  };
+export default function Onboarding() {
+  const [isChecked, setIsChecked] = useState(false);
 
   return (
     <AuthLayout>
       <div className="space-y-8">
         
-        {/* Back Button */}
-        <div className="-mt-12 md:-mt-0 mb-4">
-          <Link href="/username" className="inline-block p-2 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-[#404040] transition-colors">
-            <ChevronLeftIcon className="w-6 h-6 text-slate-900 dark:text-white" />
-          </Link>
-        </div>
-
+        {/* Header Text */}
         <div className="space-y-2">
-           <h2 className="text-2xl font-bold text-slate-900 dark:text-white uppercase tracking-wide">
-             SET UP PASSKEY
-           </h2>
-           <p className="text-slate-500 dark:text-gray-400 font-medium">
-             No passwords. Just use your face or fingerprint to secure your wallet.
-           </p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white uppercase tracking-wide">
+            GET STARTED
+          </h2>
+          <p className="text-slate-400 text-sm font-medium">
+            Send, Receive, and Spend. No seed phrases.
+          </p>
         </div>
 
-        {/* Visual Icon Group */}
-        <div className="flex justify-center py-6">
-          <div className="relative">
-            <div className="w-24 h-24 rounded-full bg-slate-100 dark:bg-[#252525] border-2 border-slate-200 dark:border-[#A3A3A3] flex items-center justify-center animate-pulse">
-              <FingerPrintIcon className="w-12 h-12 text-slate-400 dark:text-gray-400" />
-            </div>
-            {/* Security Badge Overlay */}
-            <div className="absolute -bottom-2 -right-2 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 p-2 rounded-full border border-white dark:border-[#3d3d3d] shadow-sm">
-               <ShieldCheckIcon className="w-5 h-5" />
-            </div>
-          </div>
+        {/* Buttons */}
+        <div className="space-y-4">
+          {/* Sign Up -> Goes to Referral Page */}
+          <Link href={isChecked ? "/signup" : "#"}>
+            <button 
+              disabled={!isChecked}
+              className="w-full py-5 rounded-2xl bg-[#D364DB] text-white font-bold text-lg shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.9)] hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] transition-all flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+            >
+              Create Account
+              <ArrowRightIcon className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </button>
+          </Link>
+
+          <button 
+              disabled={!isChecked}
+              className="w-full py-5 rounded-2xl bg-white dark:bg-[#252525] text-slate-900 dark:text-white border-2 border-slate-900 dark:border-white font-bold text-lg shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.9)] hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+          >
+            I have an account
+          </button>
         </div>
 
-        {/* Main Action Button */}
-        <button 
-          onClick={handleCreatePasskey}
-          disabled={loading}
-          className="w-full py-4 rounded-2xl bg-[#D364DB] text-white font-bold text-lg shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.9)] hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] transition-all flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-wait"
-        >
-          {loading ? (
-            <>
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Creating...
-            </>
-          ) : (
-            "Create Passkey"
-          )}
-        </button>
-
-        {/* Maybe Later */}
-        <button 
-          onClick={() => router.push("/")}
-          className="w-full py-4 text-slate-400 dark:text-gray-500 font-bold hover:text-slate-600 dark:hover:text-gray-300 transition-colors"
-        >
-          Maybe later
-        </button>
-
+        {/* Terms Checkbox */}
+        <div className="flex items-start gap-3 mt-8">
+          <button 
+            onClick={() => setIsChecked(!isChecked)}
+            className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${isChecked ? 'bg-[#D364DB] border-[#D364DB]' : 'border-slate-300 dark:border-slate-500 bg-transparent'}`}
+          >
+            {isChecked && <CheckIcon className="w-3.5 h-3.5 text-white" />}
+          </button>
+          <p className="text-xs text-slate-400 leading-relaxed select-none" onClick={() => setIsChecked(!isChecked)}>
+            By checking this box, you agree to our <span className="underline hover:text-purple-500">Terms</span> & <span className="underline hover:text-purple-500">Privacy Policy</span>.
+          </p>
+        </div>
       </div>
     </AuthLayout>
   );
 }
-EOF
-mkdir -p src/app/passkey
-cat << 'EOF' > src/app/passkey/page.tsx
-import PasskeySetup from "@/components/auth/PasskeySetup";
-export default function Page() { return <PasskeySetup />; }
 EOF

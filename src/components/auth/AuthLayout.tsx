@@ -1,6 +1,7 @@
 "use client"
 
 import { ReactNode } from "react";
+import Image from "next/image";
 
 interface AuthLayoutProps {
   children: ReactNode;
@@ -15,10 +16,18 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
         {/* Background Blob */}
         <div className="absolute w-[500px] h-[500px] bg-purple-200/50 dark:bg-purple-900/20 rounded-full blur-3xl -z-10 animate-pulse" />
 
-        {/* Bouncing Logo */}
-        <div className="relative w-32 h-32 md:w-48 md:h-48 mb-8 animate-bounce-custom">
-          <div className="w-full h-full bg-[#D364DB] rounded-[2rem] flex items-center justify-center shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,0.9)] transform rotate-3">
-             <span className="text-white font-bold text-5xl md:text-7xl">ab</span>
+        {/* Bouncing Logo (CIRCLE SHAPE) */}
+        <div className="relative w-32 h-32 md:w-48 md:h-48 mb-8 animate-bounce-active">
+          {/* Updated: rounded-full for circle shape */}
+          <div className="w-full h-full bg-[#D364DB] rounded-full flex items-center justify-center shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,0.9)] transform rotate-3 overflow-hidden p-6">
+             <div className="relative w-full h-full">
+               <Image 
+                 src="/abokiicon.svg" 
+                 alt="Aboki Logo" 
+                 fill 
+                 className="object-contain"
+               />
+             </div>
           </div>
         </div>
 
@@ -34,6 +43,23 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
           {children}
         </div>
       </div>
+
+      {/* Aggressive Bounce Animation */}
+      <style jsx global>{`
+        @keyframes active-bounce {
+          0%, 100% { 
+            transform: translateY(-20px) rotate(3deg); 
+            animation-timing-function: cubic-bezier(0.8, 0, 1, 1); 
+          }
+          50% { 
+            transform: translateY(0px) rotate(-3deg); 
+            animation-timing-function: cubic-bezier(0, 0, 0.2, 1); 
+          }
+        }
+        .animate-bounce-active {
+          animation: active-bounce 1s infinite;
+        }
+      `}</style>
     </div>
   );
 }
