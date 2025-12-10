@@ -13,12 +13,9 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] flex justify-center">
-      
       <main className="w-full max-w-[1080px] min-h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] pb-32 transition-colors duration-300 overflow-hidden relative">
         
-        {/* FIXED Header */}
         <header className="fixed top-0 w-full max-w-[1080px] flex items-center justify-between px-6 py-5 bg-[#F6EDFF]/80 dark:bg-[#252525]/90 backdrop-blur-md z-40 border-b border-transparent dark:border-[#3d3d3d]">
-          
           <div className="relative h-8 w-32">
             <Image src="/LogoLight.svg" alt="Aboki Logo" fill className="object-contain object-left dark:hidden" priority />
             <Image src="/LogoDark.svg" alt="Aboki Logo" fill className="object-contain object-left hidden dark:block" priority />
@@ -45,7 +42,6 @@ export default function Dashboard() {
           </div>
         </header>
 
-        {/* Content Body */}
         <div className="px-6 mt-6 pt-20 flex flex-col gap-6">
           <div className="space-y-4">
             <BalanceCard />
@@ -54,9 +50,7 @@ export default function Dashboard() {
           <ActionGrid />
           <RecentActivity />
         </div>
-
       </main>
     </div>
   );
 }
-
