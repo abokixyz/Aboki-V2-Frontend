@@ -1,5 +1,6 @@
+
 import type { Config } from "tailwindcss";
-import { fontFamily } from "tailwindcss/defaultTheme"; 
+import { fontFamily } from "tailwindcss/defaultTheme";
 
 const config: Config = {
     darkMode: ["class"],
@@ -10,8 +11,8 @@ const config: Config = {
   ],
   theme: {
     extend: {
-        // Added Font Family here
         fontFamily: {
+            // This connects the variable --font-bricolage to 'font-sans'
             sans: ["var(--font-bricolage)", ...fontFamily.sans],
         },
         colors: {
