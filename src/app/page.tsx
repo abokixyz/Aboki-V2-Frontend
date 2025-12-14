@@ -1,47 +1,257 @@
 "use client"
 
+import { useEffect, useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import BalanceCard from "@/components/dashboard/BalanceCard";
 import ActionGrid from "@/components/dashboard/ActionGrid";
 import RecentActivity from "@/components/dashboard/RecentActivity";
 import ScanSection from "@/components/dashboard/ScanSection";
-import { BellIcon, MoonIcon, SunIcon, StarIcon } from "@heroicons/react/24/outline";
+import { BellIcon, MoonIcon, SunIcon, StarIcon, ArrowRightOnRectangleIcon } from "@heroicons/react/24/outline";
 
-export default function Dashboard() {
+export default function Home() {
+  const router = useRouter();
   const { setTheme, theme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [user, setUser] = useState<{ name: string; email: string; points: number } | null>(null);
+
+  // Check authentication on mount
+  useEffect(() => {
+    setMounted(true);
+    
+    const checkAuth = async () => {
+      const token = localStorage.getItem("aboki_auth_token");
+      const email = localStorage.getItem("aboki_user_email");
+      
+      console.log("🔍 Checking auth:", { hasToken: !!token, email });
+      
+      if (!token) {
+        console.log("❌ No token found, redirecting to /auth");
+        router.push("/auth");
+        return;
+      }
+
+      try {
+        // Verify token with backend using correct endpoint
+        const response = await fetch("https://apis.aboki.xyz/api/users/me", {
+          headers: { 
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        });
+        
+        console.log("📡 User profile response:", response.status);
+        
+        if (!response.ok) {
+          console.log("❌ Token invalid, clearing and redirecting");
+          localStorage.removeItem("aboki_auth_token");
+          localStorage.removeItem("aboki_user_email");
+          localStorage.removeItem("aboki_auth_method");
+          router.push("/auth");
+          return;
+        }
+
+        const result = await response.json();
+        console.log("✅ User profile loaded:", result);
+        
+        // Set user data from backend response
+        if (result.success && result.data) {
+          setUser({
+            name: result.data.name || "User",
+            email: result.data.email || email || "user@example.com",
+            points: 120 // You can add points field to your User model if needed
+          });
+          
+          // Store email for future use
+          if (result.data.email) {
+            localStorage.setItem("aboki_user_email", result.data.email);
+          }
+        }
+        
+        setIsAuthenticated(true);
+        
+      } catch (error) {
+        console.error("⚠️ Auth verification failed:", error);
+        
+        // If backend is down, still allow access if token exists
+        console.log("⚠️ Backend unavailable, using local data");
+        setUser({
+          name: "User",
+          email: email || "user@example.com",
+          points: 120
+        });
+        setIsAuthenticated(true);
+      }
+    };
+
+    checkAuth();
+  }, [router]);
+
+  const handleLogout = () => {
+    console.log("🚪 Logging out...");
+    
+    // Clear all auth data
+    localStorage.removeItem("aboki_auth_token");
+    localStorage.removeItem("aboki_user_email");
+    localStorage.removeItem("aboki_auth_method");
+    
+    // Redirect to auth page
+    router.push("/auth");
+  };
+
+  // Show loading state during hydration and auth check
+  if (!mounted || !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 mx-auto bg-gradient-to-br from-[#D364DB] to-[#C554CB] rounded-full animate-pulse" />
+          <p className="text-sm text-gray-600 dark:text-purple-100/60 font-medium">
+            Loading your wallet...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] flex justify-center">
       <main className="w-full max-w-[1080px] min-h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] pb-32 transition-colors duration-300 overflow-hidden relative">
         
+        {/* Header */}
         <header className="fixed top-0 w-full max-w-[1080px] flex items-center justify-between px-6 py-5 bg-[#F6EDFF]/80 dark:bg-[#252525]/90 backdrop-blur-md z-40 border-b border-transparent dark:border-[#3d3d3d]">
-          <div className="relative h-8 w-32">
-            <Image src="/LogoLight.svg" alt="Aboki Logo" fill className="object-contain object-left dark:hidden" priority />
-            <Image src="/LogoDark.svg" alt="Aboki Logo" fill className="object-contain object-left hidden dark:block" priority />
+          {/* Logo */}
+          <div className="relative h-8 w-32 cursor-pointer" onClick={() => router.push("/")}>
+            <Image 
+              src="/LogoLight.svg" 
+              alt="Aboki Logo" 
+              fill 
+              className="object-contain object-left dark:hidden" 
+              priority 
+            />
+            <Image 
+              src="/LogoDark.svg" 
+              alt="Aboki Logo" 
+              fill 
+              className="object-contain object-left hidden dark:block" 
+              priority 
+            />
           </div>
           
-          <div className="flex items-center gap-4">
-            <button className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-400/10 rounded-full text-yellow-600 dark:text-yellow-400 hover:bg-yellow-400/20 transition">
+          {/* Header Actions */}
+          <div className="flex items-center gap-3">
+            {/* Points */}
+            <button 
+              onClick={() => alert("Points feature coming soon! 🎉")}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-400/10 rounded-full text-yellow-600 dark:text-yellow-400 hover:bg-yellow-400/20 transition-all hover:scale-105 active:scale-95"
+              title="Reward Points - Coming Soon"
+            >
               <StarIcon className="w-4 h-4" />
-              <span className="text-xs font-bold">120 pts</span>
+              <span className="text-xs font-bold">{user?.points || 0} pts</span>
             </button>
 
+            {/* Theme Toggle */}
             <button 
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              className="relative w-9 h-9 flex items-center justify-center rounded-full text-slate-600 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-[#3d3d3d] transition-colors"
+              className="relative w-9 h-9 flex items-center justify-center rounded-full text-slate-600 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-[#3d3d3d] transition-all hover:scale-105 active:scale-95"
+              title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
             >
               <SunIcon className="w-5 h-5 absolute transition-all duration-300 rotate-0 scale-100 dark:-rotate-90 dark:scale-0" />
               <MoonIcon className="w-5 h-5 absolute transition-all duration-300 rotate-90 scale-0 dark:rotate-0 dark:scale-100" />
             </button>
 
-            <button className="relative w-9 h-9 flex items-center justify-center rounded-full text-slate-600 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-[#3d3d3d] transition-colors">
-              <BellIcon className="w-6 h-6" />
-              <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-slate-50 dark:ring-[#252525]" />
-            </button>
+            {/* Notifications */}
+            <div className="relative">
+              <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative w-9 h-9 flex items-center justify-center rounded-full text-slate-600 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-[#3d3d3d] transition-all hover:scale-105 active:scale-95"
+                title="Notifications"
+              >
+                <BellIcon className="w-6 h-6" />
+                <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-slate-50 dark:ring-[#252525]" />
+              </button>
+
+              {/* Notifications Dropdown */}
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-[#2d2d2d] rounded-2xl shadow-2xl border border-purple-200/50 dark:border-purple-900/20 p-4 animate-slide-down">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-gray-900 dark:text-purple-100">Notifications</h3>
+                    <button 
+                      onClick={() => setShowNotifications(false)}
+                      className="text-gray-600 dark:text-purple-100/60 hover:text-gray-900 dark:hover:text-purple-100"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="p-3 bg-purple-50 dark:bg-[#252525] rounded-xl">
+                      <p className="text-sm text-gray-900 dark:text-purple-100 font-medium">Welcome to Aboki! 🎉</p>
+                      <p className="text-xs text-gray-600 dark:text-purple-100/60 mt-1">Your wallet is ready to use</p>
+                    </div>
+                    <p className="text-xs text-center text-gray-500 dark:text-purple-100/50">No new notifications</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* User Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="w-9 h-9 flex items-center justify-center rounded-full bg-gradient-to-br from-[#D364DB] to-[#C554CB] text-white font-bold text-sm hover:scale-105 active:scale-95 transition-all shadow-lg"
+                title="Account"
+              >
+                {user?.name?.charAt(0).toUpperCase() || "U"}
+              </button>
+
+              {/* User Menu Dropdown */}
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-[#2d2d2d] rounded-2xl shadow-2xl border border-purple-200/50 dark:border-purple-900/20 p-4 animate-slide-down">
+                  <div className="pb-4 border-b border-purple-200/50 dark:border-purple-900/20">
+                    <p className="font-bold text-gray-900 dark:text-purple-100">{user?.name}</p>
+                    <p className="text-xs text-gray-600 dark:text-purple-100/60">{user?.email}</p>
+                  </div>
+                  
+                  <div className="py-2">
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        router.push("/profile");
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-purple-50 dark:hover:bg-[#252525] text-gray-900 dark:text-purple-100 text-sm transition-colors"
+                    >
+                      Profile Settings
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        // Add security navigation when ready
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-purple-50 dark:hover:bg-[#252525] text-gray-900 dark:text-purple-100 text-sm transition-colors"
+                    >
+                      Security
+                    </button>
+                  </div>
+
+                  <div className="pt-2 border-t border-purple-200/50 dark:border-purple-900/20">
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 text-sm font-medium transition-colors"
+                    >
+                      <ArrowRightOnRectangleIcon className="w-4 h-4" />
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
+        {/* Main Content */}
         <div className="px-6 mt-6 pt-20 flex flex-col gap-6">
           <div className="space-y-4">
             <BalanceCard />
@@ -51,6 +261,23 @@ export default function Dashboard() {
           <RecentActivity />
         </div>
       </main>
+
+      <style jsx>{`
+        @keyframes slide-down {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .animate-slide-down {
+          animation: slide-down 0.2s ease-out;
+        }
+      `}</style>
     </div>
   );
 }

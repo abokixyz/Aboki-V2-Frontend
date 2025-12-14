@@ -20,7 +20,7 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   // Hide Nav on Scan + Auth Screens
-  const hiddenRoutes = ["/scan", "/login", "/signup", "/username", "/passkey"];
+  const hiddenRoutes = ["/scan", "/auth", "/login", "/signup", "/username", "/passkey"];
   if (hiddenRoutes.includes(pathname)) return null;
 
   const navItems = [

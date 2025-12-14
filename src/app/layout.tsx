@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
-import BottomNav from "@/components/layout/BottomNav";
+import ConditionalBottomNav from "@/components/layout/BottomNav";
 
 // 1. Configure the font with Next.js optimization
 const bricolage = Bricolage_Grotesque({
@@ -31,7 +31,7 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             {children}
-            <BottomNav />
+            <ConditionalBottomNav />
         </ThemeProvider>
       </body>
     </html>

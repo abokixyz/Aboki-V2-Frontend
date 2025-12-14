@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FingerPrintIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
+import { FingerPrintIcon , ShieldCheckIcon } from "@heroicons/react/24/outline";
 import { ChevronLeftIcon } from "@heroicons/react/24/outline";
 import AuthLayout from "./AuthLayout";
 
@@ -44,7 +44,7 @@ export default function PasskeySetup() {
         <div className="flex justify-center py-6">
           <div className="relative">
             <div className="w-24 h-24 rounded-full bg-slate-100 dark:bg-[#252525] border-2 border-slate-200 dark:border-[#A3A3A3] flex items-center justify-center animate-pulse">
-              <FingerPrintIcon className="w-12 h-12 text-slate-400 dark:text-gray-400" />
+              <FingerPrintIcon  className="w-12 h-12 text-slate-400 dark:text-gray-400" />
             </div>
             {/* Security Badge Overlay */}
             <div className="absolute -bottom-2 -right-2 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 p-2 rounded-full border border-white dark:border-[#3d3d3d] shadow-sm">
