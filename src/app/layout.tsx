@@ -1,8 +1,11 @@
+// ============= app/layout.tsx =============
+
 import type { Metadata } from "next";
 import { Bricolage_Grotesque } from "next/font/google";
-import Script from "next/script"; // Add this import
+import Script from "next/script";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthProvider } from "@/lib/auth-context";
 import ConditionalBottomNav from "@/components/layout/BottomNav";
 
 const bricolage = Bricolage_Grotesque({
@@ -32,13 +35,15 @@ export default function RootLayout({
       </head>
       <body className={`min-h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] font-sans antialiased transition-colors duration-300 ${bricolage.variable}`}>
         <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <AuthProvider>
             {children}
             <ConditionalBottomNav />
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

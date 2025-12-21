@@ -167,7 +167,79 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+// ========== USER ENDPOINTS ==========
 
+  /**
+   * Get current authenticated user profile
+   */
+  async getUserProfile(): Promise<ApiResponse<{
+    _id: string;
+    name: string;
+    username: string;
+    email: string;
+    wallet: {
+      ownerAddress: string;
+      smartAccountAddress: string;
+      network: string;
+    };
+    createdAt: string;
+  }>> {
+    return this.get('/api/users/me');
+  }
+
+  /**
+   * Update user profile
+   */
+  async updateUserProfile(params: {
+    name?: string;
+    email?: string;
+    username?: string;
+  }): Promise<ApiResponse<{
+    _id: string;
+    name: string;
+    username: string;
+    email: string;
+  }>> {
+    return this.put('/api/users/me', params);
+  }
+
+  /**
+   * Get user by username
+   */
+  async getUserByUsername(username: string): Promise<ApiResponse<{
+    _id: string;
+    name: string;
+    username: string;
+    email: string;
+    wallet: {
+      ownerAddress: string;
+      smartAccountAddress: string;
+      network: string;
+    };
+  }>> {
+    return this.get(`/api/users/username/${username}`);
+  }
+
+  /**
+   * Get user wallet details
+   */
+  async getUserWallet(): Promise<ApiResponse<{
+    ownerAddress: string;
+    smartAccountAddress: string;
+    network: string;
+  }>> {
+    return this.get('/api/users/wallet');
+  }
+
+  /**
+   * Check if username is available
+   */
+  async checkUsernameAvailability(username: string): Promise<ApiResponse<{
+    available: boolean;
+    username: string;
+  }>> {
+    return this.get(`/api/users/check-username/${username}`);
+  }
   // ========== TRANSFER ENDPOINTS ==========
 
   async validateUsername(username: string): Promise<ApiResponse<{
