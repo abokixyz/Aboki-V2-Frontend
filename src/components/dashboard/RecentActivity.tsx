@@ -1,64 +1,206 @@
-import Link from "next/link";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+"use client"
 
-// Scalable Data Interface
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { 
+  ArrowUpIcon, 
+  ArrowDownIcon,
+  ArrowsRightLeftIcon
+} from "@heroicons/react/24/outline";
+import apiClient from "@/lib/api-client";
+
 interface Transaction {
-  id: string;
-  name: string;
-  type: "Received" | "Sent" | "Subscription" | "Deposit";
+  transactionId: string;
+  type: "onramp" | "offramp" | "transfer" | "link";
+  description: string;
   amount: number;
+  amountUSDC?: number;
+  amountNGN?: number;
   currency: string;
+  status: string;
   date: string;
-  initials: string;
+  reference?: string;
 }
 
-// Mock Data (simulating API response)
-const transactions: Transaction[] = [
-  { id: "tx_1", name: "Emeka O.", type: "Received", amount: 50.00, currency: "USD", date: "Today, 9:41 AM", initials: "EO" },
-  { id: "tx_2", name: "Netflix", type: "Subscription", amount: -15.99, currency: "USD", date: "Yesterday", initials: "N" },
-  { id: "tx_3", name: "Chioma A.", type: "Sent", amount: -120.00, currency: "USD", date: "Oct 24", initials: "CA" },
-];
-
 export default function RecentActivity() {
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchRecentTransactions();
+  }, []);
+
+  const fetchRecentTransactions = async () => {
+    try {
+      const response = await apiClient.getTransactionHistory({ 
+        limit: 5,
+        status: 'COMPLETED' 
+      });
+      
+      if (response.success && response.data?.transactions) {
+        setTransactions(response.data.transactions);
+      }
+    } catch (error) {
+      console.error("Failed to fetch recent transactions:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getTransactionIcon = (type: string, metadata?: any) => {
+    switch (type) {
+      case "onramp":
+        return (
+          <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+            <ArrowDownIcon className="w-5 h-5 text-green-600 dark:text-green-400" />
+          </div>
+        );
+      case "offramp":
+        return (
+          <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+            <ArrowUpIcon className="w-5 h-5 text-red-600 dark:text-red-400" />
+          </div>
+        );
+      case "transfer":
+      case "link":
+        const isReceived = metadata?.direction === "RECEIVED" || metadata?.toUsername;
+        return isReceived ? (
+          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+            <ArrowDownIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          </div>
+        ) : (
+          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+            <ArrowUpIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          </div>
+        );
+      default:
+        return (
+          <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+            <ArrowsRightLeftIcon className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+          </div>
+        );
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInMs = now.getTime() - date.getTime();
+    const diffInHours = diffInMs / (1000 * 60 * 60);
+
+    if (diffInHours < 1) {
+      const minutes = Math.floor(diffInMs / (1000 * 60));
+      return `${minutes}m ago`;
+    } else if (diffInHours < 24) {
+      return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    } else if (diffInHours < 48) {
+      return 'Yesterday';
+    } else {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+  };
+
+  const getAmountDisplay = (tx: Transaction) => {
+    if (tx.type === "onramp") {
+      return {
+        amount: `+${tx.amountUSDC?.toFixed(2)}`,
+        subtitle: `₦${tx.amountNGN?.toLocaleString()}`,
+        color: "text-green-600 dark:text-green-400"
+      };
+    } else if (tx.type === "offramp") {
+      return {
+        amount: `-${tx.amountUSDC?.toFixed(2)}`,
+        subtitle: `₦${tx.amountNGN?.toLocaleString()}`,
+        color: "text-red-600 dark:text-red-400"
+      };
+    } else {
+      return {
+        amount: `${tx.amountUSDC?.toFixed(2) || tx.amount.toFixed(2)}`,
+        subtitle: "USDC",
+        color: "text-slate-900 dark:text-white"
+      };
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="mt-8 space-y-4">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="font-bold text-lg text-slate-900 dark:text-white">Recent Activity</h3>
+        </div>
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex items-center justify-between p-4 bg-white dark:bg-[#3D3D3D] rounded-2xl border-2 border-slate-200 dark:border-[#A3A3A3] animate-pulse">
+              <div className="flex items-center gap-4 flex-1">
+                <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-1/3" />
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (transactions.length === 0) {
+    return (
+      <div className="mt-8 space-y-4">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="font-bold text-lg text-slate-900 dark:text-white">Recent Activity</h3>
+        </div>
+        <div className="p-8 bg-white dark:bg-[#3D3D3D] rounded-2xl border-2 border-slate-200 dark:border-[#A3A3A3] text-center">
+          <p className="text-slate-500 dark:text-slate-400 font-medium">No recent transactions</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-8 space-y-4">
       <div className="flex items-center justify-between px-1">
         <h3 className="font-bold text-lg text-slate-900 dark:text-white">Recent Activity</h3>
         <Link 
-          href="/activity" 
-          className="text-sm text-purple-600 hover:text-purple-500 font-medium transition-colors"
+          href="/history" 
+          className="text-sm text-[#D364DB] hover:text-[#C554CB] font-bold transition-colors"
         >
           See all
         </Link>
       </div>
 
       <div className="space-y-3">
-        {transactions.map((tx) => (
-          <div 
-            key={tx.id} 
-            className="
-              flex items-center justify-between p-4 
-              bg-white dark:bg-[#404040] 
-              rounded-2xl border border-slate-100 dark:border-[#A3A3A3] 
-              shadow-sm hover:border-slate-200 dark:hover:border-slate-500 transition-colors
-            "
-          >
-            <div className="flex items-center gap-4">
-              <Avatar className="h-10 w-10 border border-slate-100 dark:border-[#A3A3A3]">
-                <AvatarFallback className="bg-slate-100 dark:bg-[#3d3d3d] text-slate-600 dark:text-gray-300 font-bold text-xs">
-                  {tx.initials}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="font-bold text-sm text-slate-900 dark:text-white">{tx.name}</p>
-                <p className="text-xs text-slate-500 dark:text-gray-400">{tx.type} • {tx.date}</p>
+        {transactions.map((tx) => {
+          const display = getAmountDisplay(tx);
+          
+          return (
+            <div 
+              key={tx.transactionId} 
+              className="flex items-center justify-between p-4 bg-white dark:bg-[#3D3D3D] rounded-2xl border-2 border-slate-200 dark:border-[#A3A3A3] hover:border-[#D364DB] transition-colors"
+            >
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                {getTransactionIcon(tx.type)}
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                    {tx.description}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {tx.type.charAt(0).toUpperCase() + tx.type.slice(1)} • {formatDate(tx.date)}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <p className={`font-bold text-sm ${display.color}`}>
+                  {display.amount}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {display.subtitle}
+                </p>
               </div>
             </div>
-            <span className={`font-bold text-sm ${tx.amount > 0 ? 'text-green-600 dark:text-green-400' : 'text-slate-900 dark:text-white'}`}>
-              {tx.amount > 0 ? '+' : ''}{tx.amount.toFixed(2)}
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

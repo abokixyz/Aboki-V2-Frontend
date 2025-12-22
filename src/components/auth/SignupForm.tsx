@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { CheckCircleIcon, ExclamationCircleIcon, FingerPrintIcon } from "@heroicons/react/24/outline";
+import { useAuth } from "@/lib/auth-context";
 
 interface SignupFormProps {
   onSuccess: () => void;
 }
 
 export default function SignupForm({ onSuccess }: SignupFormProps) {
+  const { login } = useAuth();
   const [step, setStep] = useState<"initial" | "invite" | "details">("initial");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -83,16 +85,16 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
         displayName: name,
       },
       pubKeyCredParams: [
-        { alg: -7, type: "public-key" },   // ES256 (preferred)
-        { alg: -257, type: "public-key" } // RS256 (fallback)
+        { alg: -7, type: "public-key" },
+        { alg: -257, type: "public-key" }
       ],
       authenticatorSelection: {
-        authenticatorAttachment: "platform", // Use built-in authenticator (Face ID, Touch ID, Windows Hello)
-        requireResidentKey: false, // Changed to false - more compatible
-        residentKey: "preferred", // Changed to preferred - more compatible
-        userVerification: "preferred", // Changed to preferred - more compatible
+        authenticatorAttachment: "platform",
+        requireResidentKey: false,
+        residentKey: "preferred",
+        userVerification: "preferred",
       },
-      timeout: 120000, // Increased to 2 minutes
+      timeout: 120000,
       attestation: "none"
     };
 
@@ -132,7 +134,7 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
         clientDataJSON: arrayBufferToBase64(credential.response.clientDataJSON),
         attestationObject: arrayBufferToBase64(credential.response.attestationObject)
       },
-      challenge: arrayBufferToBase64(challenge)
+      challenge: arrayBufferToBase64(challenge.buffer)
     };
 
     console.log("📤 Sending signup request to server");
@@ -170,15 +172,22 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
       throw new Error(errorMessage);
     }
 
-    // Store auth token
-    if (data.data?.token) {
-      localStorage.setItem("aboki_auth_token", data.data.token);
-      console.log("✅ Auth token stored");
+    if (!data.data?.token) {
+      throw new Error("No token received from server");
     }
-    
-    // Store email and auth method
-    localStorage.setItem("aboki_user_email", email);
-    localStorage.setItem("aboki_auth_method", "passkey");
+
+    // ✅ Extract user data from response
+    const userData = {
+      id: data.data.user?._id || "",
+      username: data.data.user?.username || username,
+      name: data.data.user?.name || name,
+      email: data.data.user?.email || email
+    };
+
+    console.log("✅ Auth token received, storing user data:", userData.username);
+
+    // ✅ Use auth context's login function to store both token and user
+    login(data.data.token, userData);
     
     setSuccess("✨ Account created with passkey! Setting up your wallet...");
     setTimeout(() => onSuccess(), 2000);
@@ -190,7 +199,6 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
     for (let i = 0; i < bytes.length; i++) {
       binary += String.fromCharCode(bytes[i]);
     }
-    // Convert to base64url (URL-safe) instead of regular base64
     return btoa(binary)
       .replace(/\+/g, '-')
       .replace(/\//g, '_')

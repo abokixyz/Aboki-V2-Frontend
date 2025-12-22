@@ -7,7 +7,8 @@ import {
   ChevronLeftIcon, 
   CheckCircleIcon,
   ExclamationTriangleIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  ArrowPathIcon
 } from "@heroicons/react/24/outline";
 import apiClient from "@/lib/api-client";
 
@@ -25,42 +26,34 @@ function ReviewBankContent() {
 
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
-  const [step, setStep] = useState<"review" | "passkey" | "processing" | "success">("review");
-  const [transactionRef, setTransactionRef] = useState("");
+  const [step, setStep] = useState<"review" | "processing" | "success">("review");
+  const [statusMessage, setStatusMessage] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
 
-  /**
-   * Convert base64url to Uint8Array
-   * WebAuthn uses base64url encoding (- and _ instead of + and /)
-   */
   const base64ToUint8Array = (base64: string): Uint8Array => {
     try {
-      // Convert base64url to standard base64
-      // Replace URL-safe characters and add padding if needed
       let base64Standard = base64
         .replace(/-/g, '+')
         .replace(/_/g, '/');
       
-      // Add padding if needed
       const padLength = (4 - (base64Standard.length % 4)) % 4;
       base64Standard += '='.repeat(padLength);
       
       const binaryString = atob(base64Standard);
-      const bytes = new Uint8Array(binaryString.length);
+      const buffer = new ArrayBuffer(binaryString.length);
+      const bytes = new Uint8Array(buffer);
+      
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
+      
       return bytes;
     } catch (err: any) {
       console.error('❌ Base64 decode error:', err);
-      console.error('Input string:', base64);
       throw new Error(`Failed to decode base64: ${err.message}`);
     }
   };
 
-  /**
-   * Convert Uint8Array to base64url
-   * WebAuthn expects base64url format (no padding, URL-safe chars)
-   */
   const uint8ArrayToBase64 = (buffer: Uint8Array): string => {
     let binary = '';
     for (let i = 0; i < buffer.byteLength; i++) {
@@ -68,57 +61,41 @@ function ReviewBankContent() {
     }
     const base64 = btoa(binary);
     
-    // Convert to base64url format (URL-safe, no padding)
     return base64
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=/g, '');
   };
 
-  const handleInitiate = async () => {
+  const handleCompleteTransaction = async () => {
     setProcessing(true);
     setError("");
+    setStep("processing");
+    let transactionRef = "";
 
     try {
-      console.log('📝 Initiating offramp...');
+      // Step 1: Initiate offramp
+      setStatusMessage("Initiating transaction...");
+      console.log('📝 Step 1: Initiating offramp...');
       
-      const response = await apiClient.initiateOfframp({
+      const initiateResponse = await apiClient.initiateOfframp({
         amountUSDC: parseFloat(amountUSDC),
         accountNumber: account,
         bankCode: bank,
         name: name
       });
 
-      console.log('API Response:', response);
-
-      if (!response.success || !response.data) {
-        const errorMessage = response.error || "Failed to initiate transaction";
-        console.error('❌ Initiate failed:', errorMessage);
-        throw new Error(errorMessage);
+      if (!initiateResponse.success || !initiateResponse.data) {
+        throw new Error(initiateResponse.error || "Failed to initiate transaction");
       }
 
-      console.log('✅ Offramp initiated:', response.data.transactionReference);
-      setTransactionRef(response.data.transactionReference);
-      
-      // Move to passkey step
-      setStep("passkey");
-      setProcessing(false);
-      
-    } catch (err: any) {
-      console.error('❌ Initiate error:', err);
-      setError(err.message || "Failed to initiate transaction");
-      setProcessing(false);
-    }
-  };
+      transactionRef = initiateResponse.data.transactionReference;
+      console.log('✅ Offramp initiated:', transactionRef);
 
-  const handlePasskeyVerification = async () => {
-    setProcessing(true);
-    setError("");
-
-    try {
-      console.log('🔐 Step 1: Getting passkey challenge...');
+      // Step 2: Get passkey challenge
+      setStatusMessage("Preparing security verification...");
+      console.log('🔐 Step 2: Getting passkey challenge...');
       
-      // Step 2a: Get passkey challenge
       const optionsResponse = await fetch("https://apis.aboki.xyz/api/auth/passkey/transaction-verify-options", {
         method: "POST",
         headers: {
@@ -139,14 +116,16 @@ function ReviewBankContent() {
 
       const options = await optionsResponse.json();
       console.log('✅ Challenge received');
-      console.log('Challenge data:', options.data);
 
-      // Step 2b: User performs biometric authentication
-      console.log('👆 Requesting biometric authentication...');
+      // Step 3: Biometric authentication
+      setStatusMessage("Waiting for biometric verification...");
+      console.log('👆 Step 3: Requesting biometric authentication...');
+      
+      const challengeBuffer = base64ToUint8Array(options.data.challenge);
       
       const credential = await navigator.credentials.get({
         publicKey: {
-          challenge: base64ToUint8Array(options.data.challenge),
+          challenge: challengeBuffer as BufferSource,
           timeout: options.data.timeout || 60000,
           rpId: options.data.rpId || "aboki.xyz",
           allowCredentials: [],
@@ -155,15 +134,16 @@ function ReviewBankContent() {
       }) as PublicKeyCredential;
 
       if (!credential) {
-        throw new Error("Passkey verification cancelled");
+        throw new Error("Passkey verification was cancelled");
       }
 
       console.log('✅ Biometric authentication successful');
-      console.log('Credential ID:', credential.id);
 
-      // Step 2c: Verify passkey signature and get verification token
+      // Step 4: Verify passkey
+      setStatusMessage("Verifying your identity...");
+      console.log('🔐 Step 4: Verifying passkey signature...');
+      
       const response = credential.response as AuthenticatorAssertionResponse;
-      console.log('🔐 Verifying passkey signature...');
       
       const verifyPayload = {
         credentialId: credential.id,
@@ -171,7 +151,6 @@ function ReviewBankContent() {
         clientDataJSON: uint8ArrayToBase64(new Uint8Array(response.clientDataJSON)),
         signature: uint8ArrayToBase64(new Uint8Array(response.signature)),
         userHandle: response.userHandle ? uint8ArrayToBase64(new Uint8Array(response.userHandle)) : null,
-        // ✅ FIXED: Transaction data must be nested object
         transactionData: {
           type: "withdraw",
           amount: parseFloat(amountUSDC),
@@ -179,14 +158,6 @@ function ReviewBankContent() {
           transactionReference: transactionRef
         }
       };
-
-      console.log('Verify payload:', {
-        credentialId: credential.id.slice(0, 20) + '...',
-        authenticatorDataLength: verifyPayload.authenticatorData.length,
-        clientDataJSONLength: verifyPayload.clientDataJSON.length,
-        signatureLength: verifyPayload.signature.length,
-        transactionReference: transactionRef
-      });
       
       const verifyResponse = await fetch("https://apis.aboki.xyz/api/auth/passkey/transaction-verify", {
         method: "POST",
@@ -204,20 +175,19 @@ function ReviewBankContent() {
       }
 
       const verifyData = await verifyResponse.json();
-      console.log('Verify response:', verifyData);
       
       if (!verifyData.data?.token) {
         throw new Error("No verification token received");
       }
 
       console.log('✅ Passkey verified, token received');
-
-      // Store the verification token in the API client
+      
+      // Step 5: IMMEDIATELY confirm and settle (before token expires)
+      setStatusMessage("Processing payment...");
+      console.log('💸 Step 5: Confirming account and initiating settlement...');
+      
+      // Set token right before the call to minimize delay
       apiClient.setPasskeyVerificationToken(verifyData.data.token);
-
-      // Step 3: Confirm account and sign (with passkey verification)
-      setStep("processing");
-      console.log('💸 Confirming account and initiating settlement...');
       
       const confirmResponse = await apiClient.confirmOfframpAndSign({
         transactionReference: transactionRef,
@@ -230,31 +200,51 @@ function ReviewBankContent() {
       }
 
       console.log('✅ Settlement initiated:', confirmResponse.data);
-
-      // Clear the passkey verification token
       apiClient.clearPasskeyVerificationToken();
 
+      setStatusMessage("Transaction successful!");
       setStep("success");
+      setRetryCount(0); // Reset retry count on success
       
       setTimeout(() => {
         router.push(`/send/bank-success?ref=${transactionRef}&amount=${amountNGN}&recipient=${encodeURIComponent(name)}&bank=${encodeURIComponent(bankName)}`);
       }, 2000);
 
     } catch (err: any) {
-      console.error("❌ Passkey error:", err);
+      console.error("❌ Transaction error:", err);
       console.error("Error stack:", err.stack);
-      setError(err.message || "Passkey verification failed");
+      
+      // Provide more helpful error messages
+      let errorMessage = err.message || "Transaction failed";
+      
+      if (errorMessage.includes("cancelled")) {
+        errorMessage = "Verification was cancelled. Please try again.";
+      } else if (errorMessage.includes("timeout")) {
+        errorMessage = "Verification timed out. Please try again.";
+      } else if (errorMessage.includes("challenge")) {
+        errorMessage = "Security verification failed. Please try again.";
+      } else if (errorMessage.includes("500") || errorMessage.includes("Internal Server Error")) {
+        errorMessage = "Transaction processing failed. Please try again.";
+      } else if (errorMessage.includes("execute Aboki order")) {
+        errorMessage = "Payment processing error. Please try again in a moment.";
+      }
+      
+      setError(errorMessage);
       setStep("review");
       setProcessing(false);
+      setStatusMessage("");
+      setRetryCount(prev => prev + 1);
+      
+      // Always clear token on error to ensure fresh state for retry
       apiClient.clearPasskeyVerificationToken();
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] flex justify-center">
-      <div className="w-full max-w-[1080px] min-h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] transition-colors duration-300 overflow-hidden flex flex-col">
+    <div className="bg-[#F6EDFF]/50 dark:bg-[#252525]">
+      <div className="w-full max-w-[1080px] mx-auto bg-[#F6EDFF]/50 dark:bg-[#252525] transition-colors duration-300 min-h-screen">
         
-        <header className="px-6 py-6 flex items-center gap-4">
+        <header className="px-6 py-6 flex items-center gap-4 sticky top-0 bg-[#F6EDFF] dark:bg-[#252525] z-10 border-b border-slate-200/50 dark:border-slate-700/50">
           {step === "review" && (
             <Link href={`/send/amount-ngn?name=${encodeURIComponent(name)}&account=${account}&bank=${bank}&bankName=${encodeURIComponent(bankName)}`} className="p-2 -ml-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
               <ChevronLeftIcon className="w-6 h-6 text-slate-900 dark:text-white" />
@@ -262,141 +252,158 @@ function ReviewBankContent() {
           )}
           <h1 className="font-bold text-xl text-slate-900 dark:text-white">
             {step === "review" && "Review Payment"}
-            {step === "passkey" && "Verify with Passkey"}
-            {step === "processing" && "Processing..."}
-            {step === "success" && "Success!"}
+            {step === "processing" && "Processing Payment"}
+            {step === "success" && "Payment Successful"}
           </h1>
         </header>
 
-        <div className="flex-1 px-6 flex flex-col justify-center pb-8">
+        <div className="px-6 pt-4" style={{ paddingBottom: '250px' }}>
           
           {step === "review" && (
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-[#3D3D3D] rounded-3xl p-6 border-2 border-slate-200 dark:border-[#A3A3A3]">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Sending to</p>
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-lg font-bold text-white">
+            <div className="space-y-6 max-w-md mx-auto w-full">
+              {/* Recipient Info */}
+              <div className="bg-white dark:bg-[#3D3D3D] rounded-2xl p-5 border-2 border-slate-200 dark:border-[#A3A3A3]">
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Sending to</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-lg font-bold text-white shrink-0">
                     {name.charAt(0)}
                   </div>
-                  <div>
-                    <p className="font-bold text-lg text-slate-900 dark:text-white">{name}</p>
-                    <p className="text-sm text-slate-500">{bankName}</p>
-                    <p className="text-xs text-slate-400 font-mono">{account}</p>
+                  <div className="min-w-0">
+                    <p className="font-bold text-base text-slate-900 dark:text-white truncate">{name}</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 truncate">{bankName}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-500 font-mono">{account}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-[#D364DB] to-[#C554CB] rounded-3xl p-6 text-white">
-                <p className="text-xs font-bold uppercase tracking-wider mb-2 opacity-80">They Receive</p>
-                <p className="text-4xl font-bold mb-1">₦{parseInt(amountNGN).toLocaleString()}</p>
-                <p className="text-sm opacity-80">You send: ${parseFloat(amountUSDC).toFixed(2)} USDC</p>
+              {/* Amount Card */}
+              <div className="bg-gradient-to-br from-[#D364DB] to-[#C554CB] rounded-2xl p-6 text-white">
+                <p className="text-xs font-bold uppercase tracking-wider mb-2 opacity-90">They'll Receive</p>
+                <p className="text-4xl font-bold mb-3">₦{parseFloat(amountNGN).toLocaleString(undefined, {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 2
+                })}</p>
+                <div className="bg-white/20 rounded-lg px-3 py-2 backdrop-blur-sm">
+                  <p className="text-sm opacity-90">You'll send: <span className="font-bold">${parseFloat(amountUSDC).toFixed(2)} USDC</span></p>
+                </div>
               </div>
 
-              <div className="bg-white dark:bg-[#3D3D3D] rounded-2xl p-4 border-2 border-slate-200 dark:border-[#A3A3A3] space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-sm text-slate-500">USDC Amount</span>
+              {/* Transaction Details */}
+              <div className="bg-white dark:bg-[#3D3D3D] rounded-2xl p-5 border-2 border-slate-200 dark:border-[#A3A3A3] space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-600 dark:text-slate-400">Amount</span>
                   <span className="text-sm font-bold text-slate-900 dark:text-white">${(parseFloat(amountUSDC) - parseFloat(fee)).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-slate-500">Fee (1%)</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-600 dark:text-slate-400">Transaction Fee</span>
                   <span className="text-sm font-bold text-slate-900 dark:text-white">${parseFloat(fee).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-slate-500">Processing Time</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-600 dark:text-slate-400">Estimated Time</span>
                   <span className="text-sm font-bold text-slate-900 dark:text-white">5-15 mins</span>
                 </div>
-                <div className="flex justify-between pt-3 border-t border-slate-200 dark:border-slate-700">
-                  <span className="text-sm font-bold text-slate-900 dark:text-white">Total Debit</span>
-                  <span className="text-sm font-bold text-slate-900 dark:text-white">${parseFloat(amountUSDC).toFixed(2)} USDC</span>
+                <div className="flex justify-between items-center pt-3 border-t-2 border-slate-200 dark:border-slate-700">
+                  <span className="text-base font-bold text-slate-900 dark:text-white">Total</span>
+                  <span className="text-base font-bold text-slate-900 dark:text-white">${parseFloat(amountUSDC).toFixed(2)} USDC</span>
                 </div>
               </div>
 
+              {/* Error Message with Retry Info */}
               {error && (
-                <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-2xl flex items-start gap-3">
-                  <ExclamationTriangleIcon className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="font-bold text-red-600 dark:text-red-400 text-sm mb-1">Transaction Failed</p>
-                    <p className="text-red-500 dark:text-red-300 text-xs">{error}</p>
+                <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-2xl">
+                  <div className="flex items-start gap-3">
+                    <ExclamationTriangleIcon className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-red-600 dark:text-red-400 text-sm mb-1">Payment Failed</p>
+                      <p className="text-red-600 dark:text-red-300 text-xs mb-2">{error}</p>
+                      {retryCount > 0 && (
+                        <p className="text-red-500 dark:text-red-400 text-xs">
+                          Attempt {retryCount + 1} - Don't worry, your funds are safe
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
 
-              <div className="mt-8 mb-32">
-                <button
-                  onClick={handleInitiate}
-                  disabled={processing}
-                  className="w-full py-4 rounded-2xl bg-[#D364DB] text-white font-bold text-lg shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.8)] hover:-translate-y-1 transition-all disabled:opacity-50 disabled:transform-none disabled:shadow-none"
-                >
-                  {processing ? "Initiating..." : "Confirm Transfer"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === "passkey" && (
-            <div className="text-center space-y-6">
-              <div className="w-20 h-20 mx-auto bg-gradient-to-br from-[#D364DB] to-[#C554CB] rounded-full flex items-center justify-center">
-                <ShieldCheckIcon className="w-10 h-10 text-white" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Verify Transaction</h2>
-                <p className="text-slate-600 dark:text-slate-400">
-                  Use your fingerprint or face ID to authorize this withdrawal
-                </p>
-              </div>
-              <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-2xl">
-                <p className="text-sm text-slate-700 dark:text-slate-300 mb-2">
-                  Withdrawing <span className="font-bold">${parseFloat(amountUSDC).toFixed(2)} USDC</span>
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {name} will receive ₦{parseInt(amountNGN).toLocaleString()}
-                </p>
-              </div>
-              {error && (
-                <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-2xl">
-                  <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
+              {/* Security Notice */}
+              <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 border border-purple-200 dark:border-purple-800">
+                <div className="flex items-start gap-3">
+                  <ShieldCheckIcon className="w-5 h-5 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-bold text-purple-900 dark:text-purple-300 mb-1">Secure Transaction</p>
+                    <p className="text-xs text-purple-700 dark:text-purple-400">
+                      You'll be asked to verify with your fingerprint or face ID
+                    </p>
+                  </div>
                 </div>
-              )}
-
-              <div className="mt-8 mb-32">
-                <button
-                  onClick={handlePasskeyVerification}
-                  disabled={processing}
-                  className="w-full py-4 rounded-2xl bg-[#D364DB] text-white font-bold text-lg shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.8)] hover:-translate-y-1 transition-all disabled:opacity-50 disabled:transform-none disabled:shadow-none flex items-center justify-center gap-2"
-                >
-                  <ShieldCheckIcon className="w-5 h-5" />
-                  {processing ? "Verifying..." : "Verify with Passkey"}
-                </button>
               </div>
+
+              {/* Confirm Button */}
+              <button
+                onClick={handleCompleteTransaction}
+                disabled={processing}
+                className="w-full py-4 rounded-2xl bg-[#D364DB] text-white font-bold text-lg shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.8)] hover:-translate-y-1 transition-all disabled:opacity-50 disabled:transform-none disabled:shadow-none disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <ShieldCheckIcon className="w-5 h-5" />
+                {processing ? "Processing..." : "Confirm & Pay"}
+              </button>
             </div>
           )}
 
           {step === "processing" && (
-            <div className="text-center space-y-6">
-              <div className="w-20 h-20 mx-auto border-4 border-[#D364DB] border-t-transparent rounded-full animate-spin" />
+            <div className="text-center space-y-6 max-w-md mx-auto">
+              <div className="relative w-24 h-24 mx-auto">
+                <div className="absolute inset-0 border-4 border-purple-200 dark:border-purple-900 rounded-full" />
+                <div className="absolute inset-0 border-4 border-[#D364DB] border-t-transparent rounded-full animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <ArrowPathIcon className="w-8 h-8 text-[#D364DB]" />
+                </div>
+              </div>
+              
               <div>
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Processing Transfer</h2>
-                <p className="text-slate-600 dark:text-slate-400 mb-1">
-                  Sending ₦{parseInt(amountNGN).toLocaleString()} to {name}
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+                  {statusMessage || "Processing..."}
+                </h2>
+                <p className="text-slate-600 dark:text-slate-400 mb-2">
+                  Sending ₦{parseFloat(amountNGN).toLocaleString()} to {name}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  This may take a few moments...
+                <p className="text-sm text-slate-500 dark:text-slate-500">
+                  Please don't close this window
                 </p>
+              </div>
+
+              {/* Progress Steps */}
+              <div className="bg-white dark:bg-[#3D3D3D] rounded-2xl p-5 border-2 border-slate-200 dark:border-[#A3A3A3] text-left">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center shrink-0">
+                      <CheckCircleIcon className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="text-sm text-slate-700 dark:text-slate-300">Transaction initiated</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 rounded-full border-2 border-[#D364DB] flex items-center justify-center shrink-0">
+                      <div className="w-2 h-2 bg-[#D364DB] rounded-full animate-pulse" />
+                    </div>
+                    <span className="text-sm text-slate-700 dark:text-slate-300">{statusMessage}</span>
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
           {step === "success" && (
-            <div className="text-center space-y-6">
-              <div className="w-20 h-20 mx-auto bg-green-500 rounded-full flex items-center justify-center">
-                <CheckCircleIcon className="w-12 h-12 text-white" />
+            <div className="text-center space-y-6 max-w-md mx-auto">
+              <div className="w-24 h-24 mx-auto bg-green-500 rounded-full flex items-center justify-center animate-bounce">
+                <CheckCircleIcon className="w-14 h-14 text-white" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Transfer Initiated!</h2>
-                <p className="text-slate-600 dark:text-slate-400 mb-1">
-                  ₦{parseInt(amountNGN).toLocaleString()} is on its way to {name}
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Payment Successful!</h2>
+                <p className="text-slate-600 dark:text-slate-400 mb-2">
+                  ₦{parseFloat(amountNGN).toLocaleString()} is on its way to {name}
                 </p>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
+                <p className="text-sm text-slate-500 dark:text-slate-500">
                   Estimated arrival: 5-15 minutes
                 </p>
               </div>

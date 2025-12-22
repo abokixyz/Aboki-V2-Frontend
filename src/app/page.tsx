@@ -4,109 +4,37 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
+import { useAuth } from "@/lib/auth-context";
 import BalanceCard from "@/components/dashboard/BalanceCard";
 import ActionGrid from "@/components/dashboard/ActionGrid";
 import RecentActivity from "@/components/dashboard/RecentActivity";
 import ScanSection from "@/components/dashboard/ScanSection";
 import { BellIcon, MoonIcon, SunIcon, StarIcon, ArrowRightOnRectangleIcon } from "@heroicons/react/24/outline";
-import apiClient from "@/lib/api-client";
 
 export default function Home() {
   const router = useRouter();
   const { setTheme, theme } = useTheme();
+  
+  // ✅ Use the auth context instead of duplicate checking
+  const { user, loading, isAuthenticated, logout } = useAuth();
+  
   const [mounted, setMounted] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [user, setUser] = useState<{ name: string; email: string; points: number } | null>(null);
 
-  // Check authentication on mount
   useEffect(() => {
     setMounted(true);
-    
-    const checkAuth = async () => {
-      // Use apiClient to get token
-      const token = apiClient.getToken();
-      const email = localStorage.getItem("aboki_user_email");
-      
-      console.log("🔍 Checking auth:", { hasToken: !!token, email });
-      
-      if (!token) {
-        console.log("❌ No token found, redirecting to /auth");
-        router.push("/auth");
-        return;
-      }
+  }, []);
 
-      try {
-        // Verify token with backend
-        const response = await fetch("https://apis.aboki.xyz/api/users/me", {
-          headers: { 
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-          }
-        });
-        
-        console.log("📡 User profile response:", response.status);
-        
-        if (!response.ok) {
-          console.log("❌ Token invalid, clearing and redirecting");
-          apiClient.clearToken();
-          localStorage.removeItem("aboki_user_email");
-          localStorage.removeItem("aboki_auth_method");
-          router.push("/auth");
-          return;
-        }
-
-        const result = await response.json();
-        console.log("✅ User profile loaded:", result);
-        
-        // Set user data from backend response
-        if (result.success && result.data) {
-          setUser({
-            name: result.data.name || "User",
-            email: result.data.email || email || "user@example.com",
-            points: 120
-          });
-          
-          // Store email for future use
-          if (result.data.email) {
-            localStorage.setItem("aboki_user_email", result.data.email);
-          }
-        }
-        
-        setIsAuthenticated(true);
-        
-      } catch (error) {
-        console.error("⚠️ Auth verification failed:", error);
-        
-        // If backend is down, still allow access if token exists
-        console.log("⚠️ Backend unavailable, using local data");
-        setUser({
-          name: "User",
-          email: email || "user@example.com",
-          points: 120
-        });
-        setIsAuthenticated(true);
-      }
-    };
-
-    checkAuth();
-  }, [router]);
-
-  const handleLogout = () => {
-    console.log("🚪 Logging out...");
-    
-    // Clear all auth data using apiClient
-    apiClient.clearToken();
-    localStorage.removeItem("aboki_user_email");
-    localStorage.removeItem("aboki_auth_method");
-    
-    // Redirect to auth page
-    router.push("/auth");
-  };
+  // ✅ Redirect if not authenticated (auth-context handles this, but be explicit)
+  useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      router.push("/auth");
+    }
+  }, [loading, isAuthenticated, router]);
 
   // Show loading state during hydration and auth check
-  if (!mounted || !isAuthenticated) {
+  if (!mounted || loading || !isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] flex items-center justify-center">
         <div className="text-center space-y-4">
@@ -118,6 +46,11 @@ export default function Home() {
       </div>
     );
   }
+
+  const handleLogout = () => {
+    console.log("🚪 Logging out...");
+    logout();
+  };
 
   return (
     <div className="min-h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] flex justify-center">
@@ -152,7 +85,7 @@ export default function Home() {
               title="Reward Points - Coming Soon"
             >
               <StarIcon className="w-4 h-4" />
-              <span className="text-xs font-bold">{user?.points || 0} pts</span>
+              <span className="text-xs font-bold">120 pts</span>
             </button>
 
             {/* Theme Toggle */}

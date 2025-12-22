@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { CheckCircleIcon, ExclamationCircleIcon, FingerPrintIcon } from "@heroicons/react/24/outline";
+import { useAuth } from "@/lib/auth-context";
 
 interface LoginFormProps {
   onSuccess: () => void;
 }
 
 export default function LoginForm({ onSuccess }: LoginFormProps) {
+  const { login } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -38,9 +40,9 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
 
       const publicKeyOptions: PublicKeyCredentialRequestOptions = {
         challenge,
-        timeout: 120000, // 2 minutes
+        timeout: 120000,
         rpId: window.location.hostname === "localhost" ? "localhost" : window.location.hostname,
-        userVerification: "preferred" // Changed to preferred for better compatibility
+        userVerification: "preferred"
       };
 
       let credential;
@@ -80,7 +82,7 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
           authenticatorData: arrayBufferToBase64(credential.response.authenticatorData),
           signature: arrayBufferToBase64(credential.response.signature)
         },
-        challenge: arrayBufferToBase64(challenge)
+        challenge: arrayBufferToBase64(challenge.buffer)
       };
 
       console.log("📤 Sending login request to server");
@@ -114,13 +116,22 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
         throw new Error(errorMessage);
       }
 
-      if (data.data?.token) {
-        localStorage.setItem("aboki_auth_token", data.data.token);
-        console.log("✅ Auth token stored");
+      if (!data.data?.token) {
+        throw new Error("No token received from server");
       }
 
-      localStorage.setItem("aboki_user_email", email);
-      localStorage.setItem("aboki_auth_method", "passkey");
+      // ✅ Extract user data from response
+      const userData = {
+        id: data.data.user?._id || "",
+        username: data.data.user?.username || "",
+        name: data.data.user?.name || "User",
+        email: data.data.user?.email || email
+      };
+
+      console.log("✅ Auth token received, storing user data:", userData.username);
+
+      // ✅ Use auth context's login function to store both token and user
+      login(data.data.token, userData);
       
       setSuccess("🎉 Welcome back! Logging you in...");
       setTimeout(() => onSuccess(), 1500);
@@ -139,7 +150,6 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
     for (let i = 0; i < bytes.length; i++) {
       binary += String.fromCharCode(bytes[i]);
     }
-    // Convert to base64url (URL-safe) instead of regular base64
     return btoa(binary)
       .replace(/\+/g, '-')
       .replace(/\//g, '_')

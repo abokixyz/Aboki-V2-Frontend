@@ -15,6 +15,16 @@ import {
   UserIcon as UserSolid,
   QrCodeIcon
 } from "@heroicons/react/24/solid";
+import { ComponentType, SVGProps } from "react";
+
+// Define the nav item type
+type NavItem = {
+  label: string;
+  href: string;
+  icon?: ComponentType<SVGProps<SVGSVGElement>>;
+  activeIcon?: ComponentType<SVGProps<SVGSVGElement>>;
+  isFloating?: boolean;
+};
 
 export default function BottomNav() {
   const pathname = usePathname();
@@ -23,7 +33,7 @@ export default function BottomNav() {
   const hiddenRoutes = ["/scan", "/auth", "/login", "/signup", "/username", "/passkey"];
   if (hiddenRoutes.includes(pathname)) return null;
 
-  const navItems = [
+  const navItems: NavItem[] = [
     { label: "Home", href: "/", icon: HomeIcon, activeIcon: HomeSolid },
     { label: "Rewards", href: "/rewards", icon: GiftIcon, activeIcon: GiftSolid },
     { label: "SCAN", href: "/scan", isFloating: true },
@@ -48,8 +58,13 @@ export default function BottomNav() {
                   </li>
                 );
               }
+              
               const isActive = pathname === item.href;
               const Icon = isActive ? item.activeIcon : item.icon;
+              
+              // Skip if no icon is provided
+              if (!Icon) return null;
+              
               return (
                 <li key={item.label} className="relative">
                   <Link href={item.href} className="flex flex-col items-center gap-1 p-2 group">

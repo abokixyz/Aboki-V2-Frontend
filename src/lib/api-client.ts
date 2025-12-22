@@ -1,4 +1,4 @@
-// ============= lib/api-client.ts (COMPLETE WITH FIXED HEADERS) =============
+// ============= lib/api-client.ts (WITH REWARD ENDPOINTS) =============
 // API Client for Aboki Backend
 
 const BASE_URL = 'https://apis.aboki.xyz';
@@ -8,6 +8,15 @@ interface ApiResponse<T = any> {
   data?: T;
   error?: string;
   message?: string;
+}
+
+interface HistoryParams {
+  type?: 'onramp' | 'offramp' | 'transfer' | 'link';
+  status?: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+  skip?: number;
 }
 
 class ApiClient {
@@ -167,7 +176,8 @@ class ApiClient {
       method: 'DELETE',
     });
   }
-// ========== USER ENDPOINTS ==========
+
+  // ========== USER ENDPOINTS ==========
 
   /**
    * Get current authenticated user profile
@@ -240,6 +250,7 @@ class ApiClient {
   }>> {
     return this.get(`/api/users/check-username/${username}`);
   }
+
   // ========== TRANSFER ENDPOINTS ==========
 
   async validateUsername(username: string): Promise<ApiResponse<{
@@ -593,10 +604,386 @@ class ApiClient {
   }>>> {
     return this.get('/api/offramp/frequent-accounts');
   }
+
+  // ========== HISTORY ENDPOINTS ==========
+
+  /**
+   * Get unified transaction history
+   */
+  async getTransactionHistory(params: HistoryParams = {}): Promise<ApiResponse<{
+    transactions: Array<{
+      transactionId: string;
+      type: 'onramp' | 'offramp' | 'transfer' | 'link';
+      description: string;
+      amount: number;
+      amountUSDC?: number;
+      amountNGN?: number;
+      currency: string;
+      status: string;
+      date: string;
+      reference?: string;
+      transactionHash?: string;
+      explorerUrl?: string;
+      metadata?: any;
+    }>;
+    summary: {
+      totalTransactions: number;
+      totalOnramp: number;
+      totalOfframp: number;
+      totalTransfer: number;
+      totalLink: number;
+      completedCount: number;
+      pendingCount: number;
+      failedCount: number;
+    };
+    pagination: {
+      limit: number;
+      skip: number;
+      hasMore: boolean;
+      total: number;
+    };
+  }>> {
+    const queryParams = new URLSearchParams();
+    
+    if (params.type) queryParams.append('type', params.type);
+    if (params.status) queryParams.append('status', params.status);
+    if (params.startDate) queryParams.append('startDate', params.startDate);
+    if (params.endDate) queryParams.append('endDate', params.endDate);
+    if (params.limit) queryParams.append('limit', params.limit.toString());
+    if (params.skip) queryParams.append('skip', params.skip.toString());
+
+    const endpoint = `/api/history/unified${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    return this.get(endpoint);
+  }
+
+  /**
+   * Get onramp history only
+   */
+  async getOnrampHistoryOnly(params: Omit<HistoryParams, 'type'> = {}): Promise<ApiResponse<{
+    transactions: any[];
+    pagination: {
+      limit: number;
+      skip: number;
+      total: number;
+      hasMore: boolean;
+    };
+  }>> {
+    const queryParams = new URLSearchParams();
+    
+    if (params.status) queryParams.append('status', params.status);
+    if (params.limit) queryParams.append('limit', params.limit.toString());
+    if (params.skip) queryParams.append('skip', params.skip.toString());
+
+    const endpoint = `/api/history/onramp${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    return this.get(endpoint);
+  }
+
+  /**
+   * Get offramp history only
+   */
+  async getOfframpHistoryOnly(params: Omit<HistoryParams, 'type'> = {}): Promise<ApiResponse<{
+    transactions: any[];
+    pagination: {
+      limit: number;
+      skip: number;
+      total: number;
+      hasMore: boolean;
+    };
+  }>> {
+    const queryParams = new URLSearchParams();
+    
+    if (params.status) queryParams.append('status', params.status);
+    if (params.limit) queryParams.append('limit', params.limit.toString());
+    if (params.skip) queryParams.append('skip', params.skip.toString());
+
+    const endpoint = `/api/history/offramp${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    return this.get(endpoint);
+  }
+
+  /**
+   * Get transfer history only (from history endpoint)
+   */
+  async getTransferHistoryOnly(params: Omit<HistoryParams, 'type'> = {}): Promise<ApiResponse<{
+    transactions: any[];
+    pagination: {
+      limit: number;
+      skip: number;
+      total: number;
+      hasMore: boolean;
+    };
+  }>> {
+    const queryParams = new URLSearchParams();
+    
+    if (params.status) queryParams.append('status', params.status);
+    if (params.limit) queryParams.append('limit', params.limit.toString());
+    if (params.skip) queryParams.append('skip', params.skip.toString());
+
+    const endpoint = `/api/history/transfer${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    return this.get(endpoint);
+  }
+
+  /**
+   * Get transaction statistics
+   */
+  async getTransactionStats(): Promise<ApiResponse<{
+    onramp: {
+      count: number;
+      totalNGN: number;
+      totalUSDC: number;
+      avgAmount: number;
+      completedCount: number;
+    };
+    offramp: {
+      count: number;
+      totalUSDC: number;
+      totalNGN: number;
+      avgAmount: number;
+      completedCount: number;
+    };
+    transfer: {
+      count: number;
+      totalUSDC: number;
+      avgAmount: number;
+      sent: number;
+      received: number;
+      completedCount: number;
+    };
+    overall: {
+      totalTransactions: number;
+      totalCompleted: number;
+      completionRate: number;
+      totalUSDCInvolved: number;
+      totalNGNInvolved: number;
+    };
+  }>> {
+    return this.get('/api/history/stats');
+  }
+
+  // ========== REWARD ENDPOINTS ==========
+
+  /**
+   * Get my reward points and breakdown
+   * 
+   * @returns User's total points, broken down by category:
+   *   - invitePoints: Points from inviting friends
+   *   - tradePoints: Points from trading
+   *   - referralBonusPoints: Points from referrals trading
+   */
+  async getMyRewardPoints(): Promise<ApiResponse<{
+    userId: string;
+    totalPoints: number;
+    pointBreakdown: {
+      invitePoints: number;
+      tradePoints: number;
+      referralBonusPoints: number;
+    };
+    details: {
+      fromInvites: {
+        points: number;
+        description: string;
+      };
+      fromTrades: {
+        points: number;
+        description: string;
+      };
+      fromReferralBonus: {
+        points: number;
+        description: string;
+      };
+    };
+    lastUpdated: string;
+  }>> {
+    return this.get('/api/rewards/my-points');
+  }
+
+  /**
+   * Get my points earning history
+   * 
+   * @param params Optional filters:
+   *   - type: Filter by 'invite', 'trade', or 'referral_bonus'
+   *   - limit: Number of records (default 50, max 100)
+   *   - skip: Pagination offset (default 0)
+   * 
+   * @returns Array of point transactions with pagination info
+   */
+  async getMyRewardHistory(params?: {
+    type?: 'invite' | 'trade' | 'referral_bonus';
+    limit?: number;
+    skip?: number;
+  }): Promise<ApiResponse<{
+    data: Array<{
+      transactionId: string;
+      pointType: 'invite' | 'trade' | 'referral_bonus';
+      points: number;
+      description: string;
+      amount?: number;
+      referrerId?: string;
+      relatedTransactionId?: string;
+      earnedAt: string;
+    }>;
+    pagination: {
+      limit: number;
+      skip: number;
+      total: number;
+      hasMore: boolean;
+    };
+  }>> {
+    const queryParams = new URLSearchParams();
+    
+    if (params?.type) queryParams.append('type', params.type);
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.skip) queryParams.append('skip', params.skip.toString());
+
+    const endpoint = `/api/rewards/my-history${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    return this.get(endpoint);
+  }
+
+  /**
+   * Get referral bonus information
+   * 
+   * @returns Information about who referred you and your referral earnings
+   */
+  async getReferralBonusInfo(): Promise<ApiResponse<{
+    youAreInvitedBy?: {
+      username: string;
+      name: string;
+      referralBonusPoints: number;
+      totalPoints: number;
+      earnedFromYou: number;
+    } | null;
+    yourReferralBonus: {
+      totalBonusPoints: number;
+      description: string;
+      howItWorks: {
+        step1: string;
+        step2: string;
+        step3: string;
+        step4: string;
+        step5: string;
+      };
+    };
+  }>> {
+    return this.get('/api/rewards/referral-info');
+  }
+
+  /**
+   * Get reward leaderboard
+   * 
+   * @param params Optional filters:
+   *   - type: 'total' (default), 'invite', 'trade', or 'referral'
+   *   - limit: Number of top earners (default 20, max 100)
+   * 
+   * @returns Top earners ranked by points
+   */
+  async getRewardLeaderboard(params?: {
+    type?: 'total' | 'invite' | 'trade' | 'referral';
+    limit?: number;
+  }): Promise<ApiResponse<{
+    leaderboardType: string;
+    leaderboard: Array<{
+      rank: number;
+      username: string;
+      name: string;
+      totalPoints: number;
+      invitePoints: number;
+      tradePoints: number;
+      referralBonusPoints: number;
+    }>;
+    generatedAt: string;
+  }>> {
+    const queryParams = new URLSearchParams();
+    
+    if (params?.type) queryParams.append('type', params.type);
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+
+    const endpoint = `/api/rewards/leaderboard${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    return this.get(endpoint);
+  }
+
+  /**
+   * Get reward system rules and information
+   * 
+   * @returns Complete guide on how to earn points and upcoming rewards
+   */
+  async getRewardRules(): Promise<ApiResponse<{
+    pointSystem: {
+      title: string;
+      status: string;
+      description: string;
+      rules: Array<{
+        activity: string;
+        pointsEarned: number | string;
+        description: string;
+        maxPoints: string;
+        example: string;
+      }>;
+      pointCalculations: {
+        tradePoints: {
+          formula: string;
+          examples: Array<{
+            amount: string;
+            points: number;
+          }>;
+        };
+        referralBonus: {
+          formula: string;
+          examples: Array<{
+            referralTradeAmount: string;
+            referralEarns: number;
+            youEarn: number;
+          }>;
+        };
+      };
+      pointAccumulation: {
+        description: string;
+        categories: Array<{
+          name: string;
+          description: string;
+          color: string;
+        }>;
+        totalPoints: string;
+      };
+      upcomingRewards: {
+        status: string;
+        description: string;
+        message: string;
+      };
+      tracking: {
+        description: string;
+        features: string[];
+      };
+    };
+  }>> {
+    return this.get('/api/rewards/rules');
+  }
+
+  /**
+   * Get reward system statistics
+   * 
+   * @returns Aggregated stats: total points distributed, user count, breakdowns
+   */
+  async getRewardStats(): Promise<ApiResponse<{
+    systemStats: {
+      totalRewardRecords: number;
+      totalUsersWithPoints: number;
+      totalPointsDistributed: number;
+      avgPointsPerUser: number;
+      maxPointsEarned: number;
+      minPointsEarned: number;
+    };
+    pointsBreakdown: {
+      invitePoints: number;
+      tradePoints: number;
+      referralBonusPoints: number;
+    };
+    generatedAt: string;
+  }>> {
+    return this.get('/api/rewards/stats');
+  }
 }
 
 const apiClient = new ApiClient(BASE_URL);
 
 export default apiClient;
 export { ApiClient };
-export type { ApiResponse };
+export type { ApiResponse, HistoryParams };
