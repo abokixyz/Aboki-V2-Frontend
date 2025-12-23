@@ -36,11 +36,13 @@ export default function PasskeySetupPage() {
   const [statusMessage, setStatusMessage] = useState("");
   const [userData, setUserData] = useState<UserData | null>(null);
   const [hasExistingPasskey, setHasExistingPasskey] = useState(false);
+  const [setupAttempted, setSetupAttempted] = useState(false);
 
   // Check if user is authenticated and get profile on mount
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        console.log('🔄 Checking auth and passkey status...');
         const response = await apiClient.getUserProfile();
         if (response.success && response.data) {
           // Cast the response data to include passkey
@@ -49,18 +51,25 @@ export default function PasskeySetupPage() {
           
           // Check if user already has a passkey
           const userHasPasskey = userData?.passkey?.credentialID ? true : false;
+          console.log(`🔐 User has passkey: ${userHasPasskey}`);
+          
           setHasExistingPasskey(userHasPasskey);
           
           if (userHasPasskey) {
+            console.log('➡️ Setting step to "has_passkey"');
             setStep("has_passkey");
           } else {
+            console.log('➡️ Setting step to "setup"');
             setStep("setup");
           }
           setLoading(false);
+        } else {
+          throw new Error('Failed to fetch user profile');
         }
       } catch (err: any) {
-        console.error('Error checking user:', err);
-        router.push('/login');
+        console.error('❌ Error checking user:', err);
+        setError('Failed to load user data. Please try again.');
+        setStep("error");
         setLoading(false);
       }
     };
@@ -109,9 +118,15 @@ export default function PasskeySetupPage() {
 
   // ============= REMOVE PASSKEY HANDLER =============
   const handleRemovePasskey = async () => {
+    if (!userData) {
+      setError('User data not available');
+      return;
+    }
+
     setError("");
     setStep("removing");
     setStatusMessage("Removing existing passkey...");
+    setLoading(true);
 
     try {
       const removeResponse = await fetch(
@@ -135,18 +150,33 @@ export default function PasskeySetupPage() {
       
       // Update state
       setHasExistingPasskey(false);
+      setSetupAttempted(false);
       setStep("setup");
+      setLoading(false);
+      
+      // Refresh user data
+      const response = await apiClient.getUserProfile();
+      if (response.success && response.data) {
+        setUserData(response.data as UserData);
+      }
     } catch (err: any) {
       console.error('❌ Remove error:', err);
       setError(err.message || 'Failed to remove passkey. Please try again.');
       setStep("has_passkey");
+      setLoading(false);
     }
   };
 
   // ============= MAIN SETUP HANDLER =============
   const handleSetupPasskey = async () => {
+    if (!userData) {
+      setError('User data not available');
+      return;
+    }
+
     setError("");
     setStep("loading");
+    setSetupAttempted(true);
     setLoading(true);
 
     try {
@@ -169,12 +199,19 @@ export default function PasskeySetupPage() {
         }
       );
 
-      if (!optionsResponse.ok) {
-        const errorData = await optionsResponse.json();
-        throw new Error(errorData.error || 'Failed to get setup options');
+      const optionsData = await optionsResponse.json();
+
+      if (!optionsResponse.ok || !optionsData.success) {
+        // Check if error is about existing passkey
+        if (optionsData.error && optionsData.error.includes('already have a passkey')) {
+          setStep("has_passkey");
+          setError('You already have a passkey. Please remove it first.');
+          setLoading(false);
+          return;
+        }
+        throw new Error(optionsData.error || 'Failed to get setup options');
       }
 
-      const optionsData = await optionsResponse.json();
       const { options, challenge } = optionsData.data;
       console.log('✅ Setup options received');
 
@@ -255,11 +292,20 @@ export default function PasskeySetupPage() {
       const setupData = await setupResponse.json();
 
       if (!setupResponse.ok || !setupData.success) {
+        // If setup fails because passkey already exists, redirect to has_passkey state
+        if (setupData.error && setupData.error.includes('already have a passkey')) {
+          setStep("has_passkey");
+          setError('You already have a passkey. Please remove it first.');
+          setLoading(false);
+          return;
+        }
         throw new Error(setupData.error || 'Failed to setup passkey');
       }
 
       console.log('✅ Passkey saved successfully!');
       setStep("success");
+      setSetupAttempted(false);
+      setLoading(false);
 
       // Redirect after 3 seconds
       setTimeout(() => {
@@ -271,6 +317,17 @@ export default function PasskeySetupPage() {
       setError(err.message || 'Failed to setup passkey. Please try again.');
       setStep("error");
       setLoading(false);
+    }
+  };
+
+  // ============= HANDLE DIRECT SETUP ATTEMPT =============
+  const handleDirectSetup = () => {
+    // If user has existing passkey, show specific message
+    if (hasExistingPasskey) {
+      setStep("has_passkey");
+      setError('You already have a passkey registered. Please remove it first to set up a new one.');
+    } else {
+      handleSetupPasskey();
     }
   };
 
@@ -286,25 +343,38 @@ export default function PasskeySetupPage() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-[#F6EDFF] to-white dark:from-[#1a1a1a] dark:to-[#252525]">
-      <div className="max-w-md mx-auto px-6 py-12 flex flex-col justify-center min-h-screen">
-        {/* Header with back button */}
-        <div className="flex items-center gap-4 mb-8">
-          <Link
-            href="/dashboard"
-            className="p-2 -ml-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
-          >
-            <ChevronLeftIcon className="w-6 h-6 text-slate-900 dark:text-white" />
-          </Link>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Security Setup
-          </h1>
-        </div>
+  // If user tried to setup directly but has existing passkey
+  if (setupAttempted && hasExistingPasskey && step !== "has_passkey") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#F6EDFF] to-white dark:from-[#1a1a1a] dark:to-[#252525]">
+        <div className="max-w-md mx-auto px-6 py-12 flex flex-col justify-center min-h-screen">
+          <div className="flex items-center gap-4 mb-8">
+            <Link
+              href="/dashboard"
+              className="p-2 -ml-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+            >
+              <ChevronLeftIcon className="w-6 h-6 text-slate-900 dark:text-white" />
+            </Link>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+              Security Setup
+            </h1>
+          </div>
 
-        {/* HAS EXISTING PASSKEY STEP */}
-        {step === "has_passkey" && (
           <div className="space-y-6">
+            {/* Error Message */}
+            <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-2xl flex items-start gap-3">
+              <ExclamationCircleIcon className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-bold text-red-600 dark:text-red-400 text-sm mb-1">
+                  Setup Failed
+                </p>
+                <p className="text-red-600 dark:text-red-300 text-sm">
+                  You already have a passkey registered.  
+                  Use the remove option below to change it.
+                </p>
+              </div>
+            </div>
+
             {/* Status Message */}
             <div className="bg-green-50 dark:bg-green-900/20 rounded-2xl p-6 border-2 border-green-200 dark:border-green-800">
               <div className="flex items-start gap-3">
@@ -349,6 +419,116 @@ export default function PasskeySetupPage() {
             >
               <TrashIcon className="w-5 h-5" />
               Remove Current Passkey
+            </button>
+
+            {/* Try Again Button (direct setup) */}
+            <button
+              onClick={() => {
+                setSetupAttempted(false);
+                setError('');
+                setStep("setup");
+              }}
+              className="w-full py-3 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all flex items-center justify-center gap-2"
+            >
+              <ArrowPathIcon className="w-4 h-4" />
+              Try Setup Again
+            </button>
+
+            {/* Back Link */}
+            <div className="border-t border-slate-200 dark:border-slate-700 pt-6">
+              <Link
+                href="/dashboard"
+                className="block text-center text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              >
+                Back to Dashboard
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#F6EDFF] to-white dark:from-[#1a1a1a] dark:to-[#252525]">
+      <div className="max-w-md mx-auto px-6 py-12 flex flex-col justify-center min-h-screen">
+        {/* Header with back button */}
+        <div className="flex items-center gap-4 mb-8">
+          <Link
+            href="/dashboard"
+            className="p-2 -ml-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+          >
+            <ChevronLeftIcon className="w-6 h-6 text-slate-900 dark:text-white" />
+          </Link>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            Security Setup
+          </h1>
+        </div>
+
+        {/* HAS EXISTING PASSKEY STEP */}
+        {step === "has_passkey" && (
+          <div className="space-y-6">
+            {/* Status Message */}
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-2xl p-6 border-2 border-green-200 dark:border-green-800">
+              <div className="flex items-start gap-3">
+                <CheckCircleIcon className="w-6 h-6 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-bold text-green-900 dark:text-green-300 mb-2">
+                    Passkey Already Active
+                  </p>
+                  <p className="text-sm text-green-700 dark:text-green-400">
+                    You already have a passkey registered on this device. Your transactions are secured with biometric authentication.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Error Message if any */}
+            {error && (
+              <div className="p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-2xl">
+                <p className="text-red-600 dark:text-red-300 text-sm">{error}</p>
+              </div>
+            )}
+
+            {/* Info Box */}
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-5 border border-blue-200 dark:border-blue-800">
+              <h3 className="font-bold text-blue-900 dark:text-blue-300 mb-3">Want to change your passkey?</h3>
+              <p className="text-sm text-blue-700 dark:text-blue-400 mb-3">
+                You can remove your current passkey and set up a new one. This is useful if:
+              </p>
+              <ul className="space-y-2 text-sm text-blue-700 dark:text-blue-400">
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>You want to use a different device</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>Your biometrics changed</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>You're experiencing issues</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Remove Button */}
+            <button
+              onClick={handleRemovePasskey}
+              disabled={loading}
+              className="w-full py-4 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Removing...
+                </>
+              ) : (
+                <>
+                  <TrashIcon className="w-5 h-5" />
+                  Remove Current Passkey
+                </>
+              )}
             </button>
 
             {/* Back Link */}
@@ -431,10 +611,20 @@ export default function PasskeySetupPage() {
             {/* Setup Button */}
             <button
               onClick={handleSetupPasskey}
-              className="w-full py-4 rounded-xl bg-[#D364DB] text-white font-bold text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
+              disabled={loading}
+              className="w-full py-4 rounded-xl bg-[#D364DB] text-white font-bold text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <FingerPrintIcon className="w-5 h-5" />
-              Set Up Passkey Now
+              {loading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Setting Up...
+                </>
+              ) : (
+                <>
+                  <FingerPrintIcon className="w-5 h-5" />
+                  Set Up Passkey Now
+                </>
+              )}
             </button>
 
             {/* Skip Option */}
@@ -511,14 +701,27 @@ export default function PasskeySetupPage() {
               </div>
             </div>
 
-            {/* Retry Button */}
-            <button
-              onClick={handleSetupPasskey}
-              className="w-full py-4 rounded-xl bg-[#D364DB] text-white font-bold text-base shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
-            >
-              <ArrowPathIcon className="w-5 h-5" />
-              Try Again
-            </button>
+            {/* Check if error is about existing passkey */}
+            {error.includes('already have a passkey') ? (
+              <button
+                onClick={() => {
+                  setError('');
+                  setStep("has_passkey");
+                }}
+                className="w-full py-4 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-base shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+              >
+                <TrashIcon className="w-5 h-5" />
+                Remove Existing Passkey
+              </button>
+            ) : (
+              <button
+                onClick={handleSetupPasskey}
+                className="w-full py-4 rounded-xl bg-[#D364DB] text-white font-bold text-base shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+              >
+                <ArrowPathIcon className="w-5 h-5" />
+                Try Again
+              </button>
+            )}
 
             {/* Back Link */}
             <Link
