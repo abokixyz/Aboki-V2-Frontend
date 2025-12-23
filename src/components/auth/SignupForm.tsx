@@ -4,6 +4,8 @@ import { useState } from "react";
 import { CheckCircleIcon, ExclamationCircleIcon, FingerPrintIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "@/lib/auth-context";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://apis.aboki.xyz';
+
 interface SignupFormProps {
   onSuccess: () => void;
 }
@@ -20,6 +22,42 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
+
+  // ============= HELPER FUNCTIONS =============
+
+  const base64ToUint8Array = (base64: string): Uint8Array => {
+    let base64Standard = base64
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
+    
+    const padLength = (4 - (base64Standard.length % 4)) % 4;
+    base64Standard += '='.repeat(padLength);
+    
+    const binaryString = atob(base64Standard);
+    const buffer = new ArrayBuffer(binaryString.length);
+    const bytes = new Uint8Array(buffer);
+    
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    return bytes;
+  };
+
+  const uint8ArrayToBase64 = (buffer: Uint8Array): string => {
+    let binary = '';
+    for (let i = 0; i < buffer.byteLength; i++) {
+      binary += String.fromCharCode(buffer[i]);
+    }
+    const base64 = btoa(binary);
+    
+    return base64
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+  };
+
+  // ============= STEP HANDLER =============
 
   const handleNext = async () => {
     setLoading(true);
@@ -51,6 +89,10 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
           throw new Error("Please enter a valid email address");
         }
 
+        if (username.length < 3) {
+          throw new Error("Username must be at least 3 characters");
+        }
+
         // Create passkey and signup
         await signupWithPasskey();
       }
@@ -62,147 +104,164 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
     }
   };
 
+  // ============= PASSKEY SIGNUP FLOW =============
+
   const signupWithPasskey = async () => {
     // Check WebAuthn support
     if (!window.PublicKeyCredential) {
-      throw new Error("Passkeys are not supported on this browser. Please use Chrome 108+, Safari 16+, or Edge 108+ on a device with biometric authentication (Face ID, Touch ID, or Windows Hello).");
+      throw new Error("Passkeys are not supported on this browser. Please use Chrome 108+, Safari 16+, or Edge 108+ on a device with biometric authentication.");
     }
 
-    console.log("🔐 Creating passkey for:", email);
+    console.log('📝 Step 1: Getting registration options...');
 
-    // Create passkey
-    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    // ============= STEP 1: Get registration options from backend =============
+    const optionsResponse = await fetch(
+      `${API_BASE_URL}/api/auth/passkey/register-options`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name })
+      }
+    );
 
-    const publicKeyOptions: PublicKeyCredentialCreationOptions = {
-      challenge,
-      rp: {
-        name: "Aboki Wallet",
-        id: window.location.hostname === "localhost" ? "localhost" : window.location.hostname,
-      },
-      user: {
-        id: new TextEncoder().encode(email),
-        name: email,
-        displayName: name,
-      },
-      pubKeyCredParams: [
-        { alg: -7, type: "public-key" },
-        { alg: -257, type: "public-key" }
-      ],
-      authenticatorSelection: {
-        authenticatorAttachment: "platform",
-        requireResidentKey: false,
-        residentKey: "preferred",
-        userVerification: "preferred",
-      },
-      timeout: 120000,
-      attestation: "none"
-    };
+    if (!optionsResponse.ok) {
+      const errorData = await optionsResponse.json();
+      throw new Error(errorData.error || 'Failed to get registration options');
+    }
 
-    let credential;
+    const optionsData = await optionsResponse.json();
+    const { options, challenge } = optionsData.data;
+
+    console.log('✅ Registration options received');
+
+    // ============= STEP 2: Create passkey with biometric auth =============
+    console.log('👆 Step 2: Requesting biometric authentication...');
+    setSuccess('Please complete biometric authentication on your device...');
+
+    const challengeBuffer = base64ToUint8Array(challenge);
+
+    let credential: PublicKeyCredential | null = null;
+
     try {
       credential = await navigator.credentials.create({
-        publicKey: publicKeyOptions
-      }) as any;
+        publicKey: {
+          challenge: challengeBuffer as BufferSource,
+          rp: {
+            name: 'Aboki',
+            id: options.rp.id
+          },
+          user: {
+            id: new TextEncoder().encode(email),
+            name: email,
+            displayName: name
+          },
+          pubKeyCredParams: options.pubKeyCredParams,
+          timeout: 60000,
+          attestation: 'direct',
+          authenticatorSelection: {
+            authenticatorAttachment: 'platform',
+            residentKey: 'preferred',
+            userVerification: 'preferred'
+          }
+        }
+      }) as PublicKeyCredential;
     } catch (credError: any) {
-      console.error("❌ Passkey creation failed:", credError);
+      console.error('❌ Passkey creation failed:', credError);
       
-      if (credError.name === "NotAllowedError") {
-        throw new Error("Passkey creation was cancelled. Please try again and approve the biometric prompt.");
-      } else if (credError.name === "InvalidStateError") {
-        throw new Error("A passkey already exists for this device. Please try logging in instead.");
-      } else if (credError.name === "TimeoutError" || credError.message?.includes("timed out")) {
-        throw new Error("Passkey creation timed out. Please try again and complete the biometric prompt quickly (you have 2 minutes).");
-      } else if (credError.name === "NotSupportedError") {
-        throw new Error("Your device doesn't support passkeys. Please use a device with Face ID, Touch ID, or Windows Hello.");
+      if (credError.name === 'NotAllowedError') {
+        throw new Error('Passkey creation was cancelled. Please try again and approve the biometric prompt.');
+      } else if (credError.name === 'InvalidStateError') {
+        throw new Error('A passkey already exists for this device. Please try logging in instead.');
+      } else if (credError.name === 'TimeoutError' || credError.message?.includes('timed out')) {
+        throw new Error('Passkey creation timed out. Please try again and complete the biometric prompt quickly.');
+      } else if (credError.name === 'NotSupportedError') {
+        throw new Error('Your device doesn\'t support passkeys. Please use a device with Face ID, Touch ID, or Windows Hello.');
       } else {
-        throw new Error("Failed to create passkey: " + (credError.message || "Unknown error. Please ensure your device supports biometric authentication."));
+        throw new Error('Failed to create passkey: ' + (credError.message || 'Unknown error'));
       }
     }
 
     if (!credential) {
-      throw new Error("Failed to create passkey. Please try again.");
+      throw new Error('Passkey creation was cancelled. Please try again.');
     }
 
-    console.log("✅ Passkey created successfully");
+    console.log('✅ Passkey created successfully');
 
-    // Prepare passkey data
+    // ============= STEP 3: Prepare credential data =============
+    const response = credential.response as AuthenticatorAttestationResponse;
+    const attestationObject = new Uint8Array(response.attestationObject as ArrayBuffer);
+    const clientDataJSON = new Uint8Array(response.clientDataJSON as ArrayBuffer);
+
     const passkeyData = {
       id: credential.id,
-      rawId: arrayBufferToBase64(credential.rawId),
+      rawId: uint8ArrayToBase64(new Uint8Array(credential.rawId)),
       type: credential.type,
       response: {
-        clientDataJSON: arrayBufferToBase64(credential.response.clientDataJSON),
-        attestationObject: arrayBufferToBase64(credential.response.attestationObject)
+        clientDataJSON: uint8ArrayToBase64(clientDataJSON),
+        attestationObject: uint8ArrayToBase64(attestationObject)
       },
-      challenge: arrayBufferToBase64(challenge.buffer)
+      challenge
     };
 
-    console.log("📤 Sending signup request to server");
+    // ============= STEP 4: Register with backend =============
+    console.log('📡 Step 3: Submitting signup request...');
+    setSuccess('Creating your account...');
 
-    // Register with backend
-    const response = await fetch("https://apis.aboki.xyz/api/auth/signup", {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "Accept": "application/json"
+    const signupResponse = await fetch(`${API_BASE_URL}/api/auth/signup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
       body: JSON.stringify({
         name,
-        username,
+        username: username.toLowerCase(),
         email,
-        inviteCode,
+        inviteCode: inviteCode.toUpperCase(),
         passkey: passkeyData
-      }),
+      })
     });
 
     let data;
     try {
-      const text = await response.text();
+      const text = await signupResponse.text();
       data = text ? JSON.parse(text) : {};
     } catch (parseError) {
-      console.error("❌ Failed to parse response:", parseError);
-      throw new Error("Server returned invalid response");
+      console.error('❌ Failed to parse response:', parseError);
+      throw new Error('Server returned invalid response');
     }
 
-    console.log("📥 Signup response:", { status: response.status, success: data.success });
-    
-    if (!response.ok) {
-      const errorMessage = data.error || data.message || "Registration failed";
-      console.error("❌ Signup failed:", errorMessage);
+    console.log('📥 Signup response:', { status: signupResponse.status, success: data.success });
+
+    if (!signupResponse.ok) {
+      const errorMessage = data.error || data.message || 'Registration failed';
+      console.error('❌ Signup failed:', errorMessage);
       throw new Error(errorMessage);
     }
 
-    if (!data.data?.token) {
-      throw new Error("No token received from server");
+    if (!data.success) {
+      throw new Error(data.error || 'Signup failed');
     }
 
-    // ✅ Extract user data from response
+    if (!data.data?.token) {
+      throw new Error('No token received from server');
+    }
+
+    // ============= STEP 5: Store user data =============
+    console.log('✅ Auth token received, storing user data');
+
     const userData = {
-      id: data.data.user?._id || "",
+      id: data.data.user?._id || '',
       username: data.data.user?.username || username,
       name: data.data.user?.name || name,
       email: data.data.user?.email || email
     };
 
-    console.log("✅ Auth token received, storing user data:", userData.username);
-
-    // ✅ Use auth context's login function to store both token and user
+    // Use auth context to store token and user
     login(data.data.token, userData);
-    
-    setSuccess("✨ Account created with passkey! Setting up your wallet...");
-    setTimeout(() => onSuccess(), 2000);
-  };
 
-  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary)
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '');
+    setSuccess('✨ Account created with passkey! Setting up your wallet...');
+    setTimeout(() => onSuccess(), 2000);
   };
 
   const resetFlow = () => {
@@ -362,6 +421,9 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
                 placeholder="johndoe"
                 className="w-full px-4 py-3 bg-[#2d2d2d] dark:bg-[#2d2d2d] border-2 border-[#3d3d3d] dark:border-[#3d3d3d] rounded-xl focus:border-[#D364DB] dark:focus:border-[#D364DB] focus:outline-none text-white dark:text-white placeholder:text-white/50 dark:placeholder:text-white/50 transition-colors"
               />
+              <p className="text-xs text-gray-500 dark:text-white/50 mt-1">
+                3+ characters, lowercase, numbers and underscores only
+              </p>
             </div>
 
             <div>

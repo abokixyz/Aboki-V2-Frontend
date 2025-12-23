@@ -1,9 +1,10 @@
 // ============= lib/passkey-client.ts (WITH BACKEND INTEGRATION) =============
 /**
  * Passkey/WebAuthn Client for Transaction Verification
+ * Handles secure biometric authentication for USDC transfers
  */
 
-const BASE_URL = 'https://apis.aboki.xyz';
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://apis.aboki.xyz';
 
 interface TransactionData {
   type: 'send' | 'withdraw';
@@ -147,7 +148,7 @@ class PasskeyClient {
             Authorization: `Bearer ${authToken}`
           },
           body: JSON.stringify({
-            transactionType: data.type,
+            transactionType: data.type,  // ✅ FIXED: Maps "type" to "transactionType"
             amount: data.amount,
             recipient: data.recipient,
             message: data.message
@@ -264,7 +265,7 @@ class PasskeyClient {
    */
   getVerificationToken(): string | null {
     if (!this.verificationToken && typeof window !== 'undefined') {
-      this.verificationToken = localStorage.getItem(
+      this.verificationToken = sessionStorage.getItem(
         'passkey_verification_token'
       );
     }
@@ -274,14 +275,14 @@ class PasskeyClient {
   private storeVerificationToken(token: string): void {
     this.verificationToken = token;
     if (typeof window !== 'undefined') {
-      localStorage.setItem('passkey_verification_token', token);
+      sessionStorage.setItem('passkey_verification_token', token);
     }
   }
 
   clearVerificationToken(): void {
     this.verificationToken = null;
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('passkey_verification_token');
+      sessionStorage.removeItem('passkey_verification_token');
     }
   }
 

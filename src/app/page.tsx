@@ -9,38 +9,141 @@ import BalanceCard from "@/components/dashboard/BalanceCard";
 import ActionGrid from "@/components/dashboard/ActionGrid";
 import RecentActivity from "@/components/dashboard/RecentActivity";
 import ScanSection from "@/components/dashboard/ScanSection";
-import { BellIcon, MoonIcon, SunIcon, StarIcon, ArrowRightOnRectangleIcon } from "@heroicons/react/24/outline";
+import { BellIcon, MoonIcon, SunIcon, StarIcon, ArrowRightOnRectangleIcon, FingerPrintIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
 
 export default function Home() {
   const router = useRouter();
   const { setTheme, theme } = useTheme();
   
-  // ✅ Use the auth context instead of duplicate checking
+  // ✅ Use the auth context
   const { user, loading, isAuthenticated, logout } = useAuth();
   
   const [mounted, setMounted] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [hasPasskey, setHasPasskey] = useState(false);
+  const [checkingPasskey, setCheckingPasskey] = useState(true);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // ✅ Redirect if not authenticated (auth-context handles this, but be explicit)
+  // ✅ Check for passkey when user is authenticated
+  useEffect(() => {
+    const checkPasskey = async () => {
+      if (!loading && isAuthenticated) {
+        const token = localStorage.getItem("aboki_auth_token");
+        
+        if (!token) {
+          router.push("/auth");
+          return;
+        }
+
+        try {
+          const profileRes = await fetch("https://apis.aboki.xyz/api/users/me", {
+            headers: { 
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json"
+            }
+          });
+
+          if (profileRes.ok) {
+            const profileData = await profileRes.json();
+            
+            // Check if user has passkey
+            const userHasPasskey = profileData.data?.passkey?.credentialID ? true : false;
+            setHasPasskey(userHasPasskey);
+
+            // Redirect to setup if no passkey
+            if (!userHasPasskey) {
+              console.log('⚠️ User does not have passkey, redirecting to setup...');
+              setTimeout(() => {
+                router.push('/dashboard/security/passkey-setup');
+              }, 1500);
+            }
+          }
+        } catch (error) {
+          console.error("Error checking passkey:", error);
+        } finally {
+          setCheckingPasskey(false);
+        }
+      }
+    };
+
+    checkPasskey();
+  }, [loading, isAuthenticated, router]);
+
+  // ✅ Redirect if not authenticated
   useEffect(() => {
     if (!loading && !isAuthenticated) {
       router.push("/auth");
     }
   }, [loading, isAuthenticated, router]);
 
-  // Show loading state during hydration and auth check
-  if (!mounted || loading || !isAuthenticated) {
+  // Show loading state during hydration, auth check, or passkey check
+  if (!mounted || loading || !isAuthenticated || checkingPasskey) {
     return (
       <div className="min-h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] flex items-center justify-center">
         <div className="text-center space-y-4">
           <div className="w-16 h-16 mx-auto bg-gradient-to-br from-[#D364DB] to-[#C554CB] rounded-full animate-pulse" />
           <p className="text-sm text-gray-600 dark:text-purple-100/60 font-medium">
-            Loading your wallet...
+            {checkingPasskey ? "Checking security..." : "Loading your wallet..."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ Show setup required screen if no passkey
+  if (!hasPasskey) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#F6EDFF] to-white dark:from-[#1a1a1a] dark:to-[#252525] flex items-center justify-center px-6">
+        <div className="max-w-md text-center space-y-6">
+          {/* Icon */}
+          <div className="w-20 h-20 mx-auto bg-gradient-to-br from-[#D364DB] to-[#C554CB] rounded-full flex items-center justify-center shadow-lg">
+            <FingerPrintIcon className="w-10 h-10 text-white" />
+          </div>
+
+          {/* Title */}
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+              Security Setup Required
+            </h1>
+            <p className="text-slate-600 dark:text-slate-400">
+              You need to set up biometric security (passkey) before accessing your wallet.
+            </p>
+          </div>
+
+          {/* Info Box */}
+          <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 border border-purple-200 dark:border-purple-800">
+            <div className="flex items-start gap-3">
+              <ShieldCheckIcon className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5 shrink-0" />
+              <div className="text-left">
+                <p className="text-sm font-bold text-purple-900 dark:text-purple-300 mb-1">
+                  Why is this required?
+                </p>
+                <ul className="text-xs text-purple-700 dark:text-purple-400 space-y-1">
+                  <li>✓ Protects your funds with Face ID or Touch ID</li>
+                  <li>✓ No passwords to remember or lose</li>
+                  <li>✓ Verifies all transactions securely</li>
+                  <li>✓ Industry-standard security</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Setup Button */}
+          <button
+            onClick={() => router.push('/dashboard/security/passkey-setup')}
+            className="w-full py-4 bg-[#D364DB] hover:bg-[#C554CB] text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
+          >
+            <FingerPrintIcon className="w-5 h-5" />
+            Set Up Passkey Now
+          </button>
+
+          {/* Redirecting message */}
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Redirecting to setup page...
           </p>
         </div>
       </div>
@@ -52,6 +155,7 @@ export default function Home() {
     logout();
   };
 
+  // ✅ Only render dashboard if user has passkey
   return (
     <div className="min-h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] flex justify-center">
       <main className="w-full max-w-[1080px] min-h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] pb-32 transition-colors duration-300 overflow-hidden relative">
@@ -163,6 +267,7 @@ export default function Home() {
                     <button
                       onClick={() => {
                         setShowUserMenu(false);
+                        router.push("/dashboard/security/passkey-setup");
                       }}
                       className="w-full text-left px-3 py-2 rounded-lg hover:bg-purple-50 dark:hover:bg-[#252525] text-gray-900 dark:text-purple-100 text-sm transition-colors"
                     >

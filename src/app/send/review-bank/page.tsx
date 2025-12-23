@@ -220,7 +220,7 @@ function ReviewBankContent() {
             "Authorization": `Bearer ${apiClient.getToken()}`
           },
           body: JSON.stringify({
-            type: "withdraw",
+            transactionType: "withdraw",  // ✅ FIXED: Use "transactionType" not "type"
             amount: parseFloat(amountUSDC),
             recipient: name
           })
@@ -273,18 +273,15 @@ function ReviewBankContent() {
       const response = credential.response as AuthenticatorAssertionResponse;
       
       const verifyPayload = {
-        credentialId: credential.id,
-        authenticatorData: uint8ArrayToBase64(new Uint8Array(response.authenticatorData)),
-        clientDataJSON: uint8ArrayToBase64(new Uint8Array(response.clientDataJSON)),
-        signature: uint8ArrayToBase64(new Uint8Array(response.signature)),
-        userHandle: response.userHandle 
-          ? uint8ArrayToBase64(new Uint8Array(response.userHandle)) 
-          : null,
-        transactionData: {
-          type: "withdraw",
-          amount: parseFloat(amountUSDC),
-          recipient: name,
-          transactionReference: transactionRef
+        transactionId: options.data.transactionId,  // ✅ FIXED: Include transactionId from options
+        clientAssertion: {
+          id: Array.from(new Uint8Array(credential.rawId)),
+          clientDataJSON: Array.from(new Uint8Array(response.clientDataJSON)),
+          authenticatorData: Array.from(new Uint8Array(response.authenticatorData)),
+          signature: Array.from(new Uint8Array(response.signature)),
+          userHandle: response.userHandle 
+            ? Array.from(new Uint8Array(response.userHandle)) 
+            : null
         }
       };
       
@@ -308,13 +305,13 @@ function ReviewBankContent() {
 
       const verifyData = await verifyResponse.json();
       
-      if (!verifyData.data?.token) {
+      if (!verifyData.data?.verificationToken) {
         throw new Error("No verification token received");
       }
 
       // Store token timestamp for expiration tracking
       passkeyTokenTimestamp = Date.now();
-      apiClient.setPasskeyVerificationToken(verifyData.data.token);
+      apiClient.setPasskeyVerificationToken(verifyData.data.verificationToken);
       
       console.log('✅ Passkey verified, token received');
       console.log(`   Token valid for: ${Math.round((apiClient.getPasskeyTokenTimeRemaining() || 0) / 1000)}s`);

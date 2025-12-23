@@ -15,7 +15,9 @@ import {
   ClipboardDocumentIcon,
   CheckIcon,
   MoonIcon,
-  SunIcon
+  SunIcon,
+  ExclamationCircleIcon,
+  FingerPrintIcon
 } from "@heroicons/react/24/outline";
 
 interface UserProfile {
@@ -33,6 +35,7 @@ export default function ProfilePage() {
   const { setTheme, theme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [hasPasskey, setHasPasskey] = useState(false);
   const [inviteCode, setInviteCode] = useState<string>("");
   const [totalReferrals, setTotalReferrals] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -50,7 +53,7 @@ export default function ProfilePage() {
     }
 
     try {
-      // Fetch user profile
+      // ============= FETCH USER PROFILE + CHECK PASSKEY =============
       const profileRes = await fetch("https://apis.aboki.xyz/api/users/me", {
         headers: { 
           "Authorization": `Bearer ${token}`,
@@ -61,9 +64,24 @@ export default function ProfilePage() {
       if (profileRes.ok) {
         const profileData = await profileRes.json();
         setUser(profileData.data);
+        
+        // Check if user has passkey
+        // The backend will include passkey info if they have one
+        const userHasPasskey = profileData.data?.passkey?.credentialID ? true : false;
+        setHasPasskey(userHasPasskey);
+
+        // ============= IF NO PASSKEY, REDIRECT TO SETUP =============
+        if (!userHasPasskey) {
+          console.log('⚠️ User does not have passkey, redirecting to setup...');
+          // Wait 1 second then redirect so user can see the loading state
+          setTimeout(() => {
+            router.push('/dashboard/security/passkey-setup');
+          }, 1000);
+          return;
+        }
       }
 
-      // Fetch invite code
+      // ============= FETCH INVITE CODE =============
       const inviteRes = await fetch("https://apis.aboki.xyz/api/invites/my-code", {
         headers: { 
           "Authorization": `Bearer ${token}`,
@@ -76,7 +94,7 @@ export default function ProfilePage() {
         setInviteCode(inviteData.data.code);
       }
 
-      // Fetch referrals count
+      // ============= FETCH REFERRALS COUNT =============
       const referralsRes = await fetch("https://apis.aboki.xyz/api/invites/my-referrals", {
         headers: { 
           "Authorization": `Bearer ${token}`,
@@ -123,14 +141,77 @@ export default function ProfilePage() {
     }
   };
 
+  // ============= SHOW LOADING OR REDIRECT SCREEN =============
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F6EDFF] dark:bg-[#252525] flex items-center justify-center">
-        <div className="w-16 h-16 bg-gradient-to-br from-[#D364DB] to-[#C554CB] rounded-full animate-pulse" />
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 bg-gradient-to-br from-[#D364DB] to-[#C554CB] rounded-full animate-pulse" />
+          <p className="text-slate-600 dark:text-slate-400">Loading your profile...</p>
+        </div>
       </div>
     );
   }
 
+  // ============= IF NO PASSKEY, SHOW SETUP REQUIRED SCREEN =============
+  if (!hasPasskey) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#F6EDFF] to-white dark:from-[#1a1a1a] dark:to-[#252525] flex items-center justify-center px-6">
+        <div className="max-w-md text-center space-y-6">
+          {/* Icon */}
+          <div className="w-20 h-20 mx-auto bg-gradient-to-br from-[#D364DB] to-[#C554CB] rounded-full flex items-center justify-center shadow-lg">
+            <FingerPrintIcon className="w-10 h-10 text-white" />
+          </div>
+
+          {/* Title */}
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+              Security Setup Required
+            </h1>
+            <p className="text-slate-600 dark:text-slate-400">
+              You need to set up biometric security (passkey) before accessing your profile and transferring funds.
+            </p>
+          </div>
+
+          {/* Info Box */}
+          <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 border border-purple-200 dark:border-purple-800">
+            <div className="flex items-start gap-3">
+              <ShieldCheckIcon className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5 shrink-0" />
+              <div className="text-left">
+                <p className="text-sm font-bold text-purple-900 dark:text-purple-300 mb-1">
+                  What is a Passkey?
+                </p>
+                <ul className="text-xs text-purple-700 dark:text-purple-400 space-y-1">
+                  <li>✓ Uses Face ID or Touch ID</li>
+                  <li>✓ No passwords needed</li>
+                  <li>✓ Ultra-secure & phishing-proof</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Setup Button */}
+          <button
+            onClick={() => router.push('/dashboard/security/passkey-setup')}
+            className="w-full py-4 bg-[#D364DB] hover:bg-[#C554CB] text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
+          >
+            <FingerPrintIcon className="w-5 h-5" />
+            Set Up Passkey Now
+          </button>
+
+          {/* Logout Option */}
+          <button
+            onClick={handleLogout}
+            className="w-full py-3 text-slate-600 dark:text-slate-400 font-medium hover:text-slate-900 dark:hover:text-white transition-colors"
+          >
+            Log out instead
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ============= NORMAL PROFILE PAGE (USER HAS PASSKEY) =============
   return (
     <div className="min-h-screen bg-[#F6EDFF] dark:bg-[#252525] pb-32">
       
@@ -286,18 +367,21 @@ export default function ProfilePage() {
 
           {/* Security & Verification */}
           <button 
-            onClick={() => alert("Security settings coming soon! 🔒")}
+            onClick={() => router.push("/dashboard/security/passkey-setup")}
             className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-[#252525] transition-colors border-b border-gray-200 dark:border-[#3d3d3d]"
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#D364DB]/10 flex items-center justify-center">
-                <ShieldCheckIcon className="w-5 h-5 text-[#D364DB]" />
+              <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
+                <ShieldCheckIcon className="w-5 h-5 text-green-600" />
               </div>
               <span className="font-bold text-gray-900 dark:text-white">
                 Security & Verification
               </span>
             </div>
-            <ChevronRightIcon className="w-5 h-5 text-gray-400" />
+            <div className="flex items-center gap-2">
+              <span className="text-green-600 text-xs font-bold">✓ Active</span>
+              <ChevronRightIcon className="w-5 h-5 text-gray-400" />
+            </div>
           </button>
 
           {/* Show Full Name Toggle */}
