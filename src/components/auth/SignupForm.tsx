@@ -114,7 +114,7 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
 
     console.log('📝 Step 1: Getting registration options...');
 
-    // ============= STEP 1: Get registration options from backend =============
+    // ============= STEP 1: Get registration options + challenge from backend =============
     const optionsResponse = await fetch(
       `${API_BASE_URL}/api/auth/passkey/register-options`,
       {
@@ -130,14 +130,23 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
     }
 
     const optionsData = await optionsResponse.json();
-    const { options, challenge } = optionsData.data;
+    const { options, challenge } = optionsData.data; // ✅ GET CHALLENGE HERE
 
-    console.log('✅ Registration options received');
+    console.log('✅ Registration options received:', {
+      hasOptions: !!options,
+      hasChallenge: !!challenge,
+      challengeLength: challenge?.length
+    });
+
+    if (!challenge) {
+      throw new Error("No challenge received from server");
+    }
 
     // ============= STEP 2: Create passkey with biometric auth =============
     console.log('👆 Step 2: Requesting biometric authentication...');
     setSuccess('Please complete biometric authentication on your device...');
 
+    // Convert challenge to Uint8Array for browser API
     const challengeBuffer = base64ToUint8Array(challenge);
 
     let credential: PublicKeyCredential | null = null;
@@ -199,12 +208,12 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
       response: {
         clientDataJSON: uint8ArrayToBase64(clientDataJSON),
         attestationObject: uint8ArrayToBase64(attestationObject)
-      },
-      challenge
+      }
+      // ✅ DO NOT include challenge here - it will be sent separately
     };
 
-    // ============= STEP 4: Register with backend =============
-    console.log('📡 Step 3: Submitting signup request...');
+    // ============= STEP 4: Register with backend (SEND CHALLENGE SEPARATELY) =============
+    console.log('📡 Step 4: Submitting signup request with challenge...');
     setSuccess('Creating your account...');
 
     const signupResponse = await fetch(`${API_BASE_URL}/api/auth/signup`, {
@@ -218,7 +227,8 @@ export default function SignupForm({ onSuccess }: SignupFormProps) {
         username: username.toLowerCase(),
         email,
         inviteCode: inviteCode.toUpperCase(),
-        passkey: passkeyData
+        passkey: passkeyData,
+        challenge: challenge // ✅ SEND CHALLENGE AS SEPARATE FIELD
       })
     });
 

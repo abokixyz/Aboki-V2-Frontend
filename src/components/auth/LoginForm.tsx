@@ -35,9 +35,18 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
 
       console.log("🔐 Attempting passkey login for:", email);
 
-      // Create authentication challenge
+      // ============= STEP 1: Generate challenge =============
       const challenge = crypto.getRandomValues(new Uint8Array(32));
+      
+      // Convert challenge to base64url for backend
+      const challengeBase64Url = arrayBufferToBase64(challenge.buffer);
 
+      console.log("🔑 Challenge generated:", {
+        length: challenge.length,
+        base64Length: challengeBase64Url.length
+      });
+
+      // ============= STEP 2: Get passkey from device =============
       const publicKeyOptions: PublicKeyCredentialRequestOptions = {
         challenge,
         timeout: 120000,
@@ -72,7 +81,7 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
 
       console.log("✅ Passkey verified on device");
 
-      // Prepare passkey data
+      // ============= STEP 3: Prepare passkey data =============
       const passkeyData = {
         id: credential.id,
         rawId: arrayBufferToBase64(credential.rawId),
@@ -81,11 +90,12 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
           clientDataJSON: arrayBufferToBase64(credential.response.clientDataJSON),
           authenticatorData: arrayBufferToBase64(credential.response.authenticatorData),
           signature: arrayBufferToBase64(credential.response.signature)
-        },
-        challenge: arrayBufferToBase64(challenge.buffer)
+        }
+        // ✅ DO NOT include challenge in passkeyData
       };
 
-      console.log("📤 Sending login request to server");
+      // ============= STEP 4: Send to backend with challenge =============
+      console.log("📤 Sending login request to server with challenge");
 
       const response = await fetch("https://apis.aboki.xyz/api/auth/login", {
         method: "POST",
@@ -95,7 +105,8 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
         },
         body: JSON.stringify({
           email,
-          passkey: passkeyData
+          passkey: passkeyData,
+          challenge: challengeBase64Url // ✅ SEND CHALLENGE AS SEPARATE FIELD
         }),
       });
 

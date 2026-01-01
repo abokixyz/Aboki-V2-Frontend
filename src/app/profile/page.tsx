@@ -16,7 +16,6 @@ import {
   CheckIcon,
   MoonIcon,
   SunIcon,
-  ExclamationCircleIcon,
   FingerPrintIcon
 } from "@heroicons/react/24/outline";
 
@@ -27,6 +26,9 @@ interface UserProfile {
   wallet?: {
     ownerAddress: string;
     smartAccountAddress: string;
+  };
+  passkey?: {
+    credentialID: string;
   };
 }
 
@@ -66,14 +68,17 @@ export default function ProfilePage() {
         setUser(profileData.data);
         
         // Check if user has passkey
-        // The backend will include passkey info if they have one
         const userHasPasskey = profileData.data?.passkey?.credentialID ? true : false;
         setHasPasskey(userHasPasskey);
+
+        console.log('👤 User profile loaded:', {
+          email: profileData.data.email,
+          hasPasskey: userHasPasskey
+        });
 
         // ============= IF NO PASSKEY, REDIRECT TO SETUP =============
         if (!userHasPasskey) {
           console.log('⚠️ User does not have passkey, redirecting to setup...');
-          // Wait 1 second then redirect so user can see the loading state
           setTimeout(() => {
             router.push('/dashboard/security');
           }, 1000);
@@ -141,12 +146,12 @@ export default function ProfilePage() {
     }
   };
 
-  // ============= SHOW LOADING OR REDIRECT SCREEN =============
+  // ============= SHOW LOADING SCREEN =============
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F6EDFF] dark:bg-[#252525] flex items-center justify-center">
         <div className="text-center space-y-4">
-          <div className="w-16 h-16 bg-gradient-to-br from-[#D364DB] to-[#C554CB] rounded-full animate-pulse" />
+          <div className="w-16 h-16 bg-gradient-to-br from-[#D364DB] to-[#C554CB] rounded-full animate-pulse mx-auto" />
           <p className="text-slate-600 dark:text-slate-400">Loading your profile...</p>
         </div>
       </div>

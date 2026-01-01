@@ -187,7 +187,7 @@ export default function PasskeySetupPage() {
       console.log('📝 Step 1: Getting setup options...');
       setStatusMessage("Preparing biometric setup...");
 
-      // ============= STEP 1: Get setup options =============
+      // ============= STEP 1: Get setup options + CHALLENGE =============
       const optionsResponse = await fetch(
         `${API_BASE_URL}/api/auth/passkey/setup-options`,
         {
@@ -212,13 +212,23 @@ export default function PasskeySetupPage() {
         throw new Error(optionsData.error || 'Failed to get setup options');
       }
 
-      const { options, challenge } = optionsData.data;
-      console.log('✅ Setup options received');
+      const { options, challenge } = optionsData.data; // ✅ GET CHALLENGE HERE
+      
+      console.log('✅ Setup options received:', {
+        hasOptions: !!options,
+        hasChallenge: !!challenge,
+        challengeLength: challenge?.length
+      });
+
+      if (!challenge) {
+        throw new Error("No challenge received from server");
+      }
 
       // ============= STEP 2: Request passkey creation =============
       setStatusMessage("Please create a passkey using your fingerprint or face...");
       console.log('👆 Step 2: Requesting passkey creation...');
 
+      // Convert challenge to Uint8Array for browser API
       const challengeBuffer = base64ToUint8Array(challenge);
       let credential: PublicKeyCredential | null = null;
 
@@ -246,8 +256,16 @@ export default function PasskeySetupPage() {
           }
         }) as PublicKeyCredential;
       } catch (credError: any) {
+        console.error('❌ Passkey creation failed:', credError);
+        
         if (credError.name === 'NotAllowedError') {
           throw new Error('You cancelled the passkey creation or it timed out');
+        } else if (credError.name === 'InvalidStateError') {
+          throw new Error('A passkey already exists for this device. Please remove it first.');
+        } else if (credError.name === 'TimeoutError' || credError.message?.includes('timed out')) {
+          throw new Error('Passkey creation timed out. Please try again.');
+        } else if (credError.name === 'NotSupportedError') {
+          throw new Error('Your device doesn\'t support passkeys.');
         }
         throw new Error(`Failed to create passkey: ${credError.message}`);
       }
@@ -258,13 +276,24 @@ export default function PasskeySetupPage() {
 
       console.log('✅ Passkey created successfully');
 
-      // ============= STEP 3: Submit to backend =============
+      // ============= STEP 3: Submit to backend WITH CHALLENGE =============
       setStatusMessage("Saving your passkey...");
-      console.log('📡 Step 3: Submitting passkey...');
+      console.log('📡 Step 3: Submitting passkey with challenge...');
 
       const response = credential.response as AuthenticatorAttestationResponse;
       const attestationObject = new Uint8Array(response.attestationObject as ArrayBuffer);
       const clientDataJSON = new Uint8Array(response.clientDataJSON as ArrayBuffer);
+
+      const passkeyData = {
+        id: credential.id,
+        rawId: uint8ArrayToBase64(new Uint8Array(credential.rawId)),
+        type: credential.type,
+        response: {
+          clientDataJSON: uint8ArrayToBase64(clientDataJSON),
+          attestationObject: uint8ArrayToBase64(attestationObject)
+        }
+        // ✅ DO NOT include challenge in passkey object
+      };
 
       const setupResponse = await fetch(
         `${API_BASE_URL}/api/auth/passkey/setup`,
@@ -275,16 +304,8 @@ export default function PasskeySetupPage() {
             'Authorization': `Bearer ${apiClient.getToken()}`
           },
           body: JSON.stringify({
-            passkey: {
-              id: credential.id,
-              rawId: uint8ArrayToBase64(new Uint8Array(credential.rawId)),
-              type: credential.type,
-              response: {
-                clientDataJSON: uint8ArrayToBase64(clientDataJSON),
-                attestationObject: uint8ArrayToBase64(attestationObject)
-              },
-              challenge
-            }
+            passkey: passkeyData,
+            challenge: challenge // ✅ SEND CHALLENGE AS SEPARATE FIELD
           })
         }
       );
@@ -306,6 +327,13 @@ export default function PasskeySetupPage() {
       setStep("success");
       setSetupAttempted(false);
       setLoading(false);
+
+      // Refresh user data
+      const refreshResponse = await apiClient.getUserProfile();
+      if (refreshResponse.success && refreshResponse.data) {
+        setUserData(refreshResponse.data as UserData);
+        setHasExistingPasskey(true);
+      }
 
       // Redirect after 3 seconds
       setTimeout(() => {
@@ -612,7 +640,7 @@ export default function PasskeySetupPage() {
             <button
               onClick={handleSetupPasskey}
               disabled={loading}
-              className="w-full py-4 rounded-xl bg-[#D364DB] text-white font-bold text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-4 rounded-xl bg-[#D364DB] hover:bg-[#C554CB] text-white font-bold text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>
@@ -716,7 +744,7 @@ export default function PasskeySetupPage() {
             ) : (
               <button
                 onClick={handleSetupPasskey}
-                className="w-full py-4 rounded-xl bg-[#D364DB] text-white font-bold text-base shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+                className="w-full py-4 rounded-xl bg-[#D364DB] hover:bg-[#C554CB] text-white font-bold text-base shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
               >
                 <ArrowPathIcon className="w-5 h-5" />
                 Try Again
