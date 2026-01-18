@@ -74,19 +74,25 @@ class PasskeyClient {
   private normalizeRequestOptions(
     options: PublicKeyCredentialRequestOptions
   ): PublicKeyCredentialRequestOptions {
+    // ✅ FIXED: Build proper allowCredentials array
+    let allowCredentials: PublicKeyCredentialDescriptor[] | undefined;
+
+    if (options.allowCredentials && Array.isArray(options.allowCredentials) && options.allowCredentials.length > 0) {
+      allowCredentials = options.allowCredentials.map(cred => ({
+        type: cred.type as "public-key",
+        id: typeof cred.id === 'string' 
+          ? new Uint8Array(atob(cred.id).split('').map(c => c.charCodeAt(0)))
+          : cred.id,
+        transports: cred.transports
+      }));
+    }
+
     const normalized: PublicKeyCredentialRequestOptions = {
-      challenge: options.challenge, // ✅ Keep as-is (already BufferSource)
+      challenge: options.challenge,
       rpId: options.rpId,
       userVerification: options.userVerification ?? 'preferred',
-
-      // Safari/iOS prefers shorter timeouts
       timeout: options.timeout ?? (this.isSafari() ? 60000 : 120000),
-
-      // Safari breaks if allowCredentials is an empty array
-      allowCredentials:
-        options.allowCredentials && options.allowCredentials.length > 0
-          ? options.allowCredentials
-          : undefined
+      allowCredentials: allowCredentials
     };
 
     return normalized;
