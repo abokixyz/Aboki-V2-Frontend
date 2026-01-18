@@ -4,6 +4,8 @@ import { useState } from "react";
 import { CheckCircleIcon, ExclamationCircleIcon, FingerPrintIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "@/lib/auth-context";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://apis.aboki.xyz';
+
 interface LoginFormProps {
   onSuccess: () => void;
 }
@@ -14,6 +16,42 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [email, setEmail] = useState("");
+
+  // ============= HELPER FUNCTIONS =============
+
+  const base64ToUint8Array = (base64: string): Uint8Array => {
+    let base64Standard = base64
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
+    
+    const padLength = (4 - (base64Standard.length % 4)) % 4;
+    base64Standard += '='.repeat(padLength);
+    
+    const binaryString = atob(base64Standard);
+    const buffer = new ArrayBuffer(binaryString.length);
+    const bytes = new Uint8Array(buffer);
+    
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    return bytes;
+  };
+
+  const uint8ArrayToBase64 = (buffer: Uint8Array): string => {
+    let binary = '';
+    for (let i = 0; i < buffer.byteLength; i++) {
+      binary += String.fromCharCode(buffer[i]);
+    }
+    const base64 = btoa(binary);
+    
+    return base64
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+  };
+
+  // ============= PASSKEY LOGIN FLOW =============
 
   const handlePasskeyLogin = async () => {
     setLoading(true);
@@ -33,43 +71,60 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
         throw new Error("Passkeys are not supported on this browser. Please use Chrome 108+, Safari 16+, or Edge 108+.");
       }
 
-      console.log("🔐 Attempting passkey login for:", email);
+      console.log("🔐 Step 1: Getting login options for:", email);
 
-      // ============= STEP 1: Generate challenge =============
-      const challenge = crypto.getRandomValues(new Uint8Array(32));
-      
-      // Convert challenge to base64url for backend
-      const challengeBase64Url = arrayBufferToBase64(challenge.buffer);
-
-      console.log("🔑 Challenge generated:", {
-        length: challenge.length,
-        base64Length: challengeBase64Url.length
+      // ============= STEP 1: Get login challenge from backend =============
+      const optionsResponse = await fetch(`${API_BASE_URL}/api/auth/passkey/login-options`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.toLowerCase() })
       });
 
-      // ============= STEP 2: Get passkey from device =============
-      const publicKeyOptions: PublicKeyCredentialRequestOptions = {
-        challenge,
-        timeout: 120000,
-        rpId: window.location.hostname === "localhost" ? "localhost" : window.location.hostname,
-        userVerification: "preferred"
-      };
+      if (!optionsResponse.ok) {
+        const errorData = await optionsResponse.json();
+        throw new Error(errorData.error || 'Failed to get login options');
+      }
+
+      const optionsData = await optionsResponse.json();
+      const { options, challenge, rpId } = optionsData.data;
+
+      console.log("✅ Login options received:", {
+        hasOptions: !!options,
+        hasChallenge: !!challenge,
+        rpId
+      });
+
+      if (!challenge) {
+        throw new Error("No challenge received from server");
+      }
+
+      // ============= STEP 2: Authenticate with passkey =============
+      console.log("👆 Step 2: Requesting biometric authentication...");
+      setSuccess("Please authenticate with your biometric...");
+
+      const challengeBuffer = base64ToUint8Array(challenge);
 
       let credential;
       try {
         credential = await navigator.credentials.get({
-          publicKey: publicKeyOptions
+          publicKey: {
+            challenge: challengeBuffer as BufferSource,
+            rpId: rpId,
+            timeout: 120000,
+            userVerification: "required"
+          }
         }) as any;
       } catch (credError: any) {
         console.error("❌ Passkey authentication failed:", credError);
         
         if (credError.name === "NotAllowedError") {
-          throw new Error("Authentication was cancelled. Please try again and approve the biometric prompt.");
+          throw new Error("Authentication was cancelled. Please try again.");
         } else if (credError.name === "InvalidStateError") {
           throw new Error("No passkey found for this device. Please sign up first or use a different device.");
-        } else if (credError.name === "TimeoutError" || credError.message?.includes("timed out")) {
-          throw new Error("Authentication timed out. Please try again and complete the biometric prompt quickly (you have 2 minutes).");
+        } else if (credError.name === "TimeoutError") {
+          throw new Error("Authentication timed out. Please try again.");
         } else if (credError.name === "NotSupportedError") {
-          throw new Error("Your device doesn't support passkeys. Please use a device with Face ID, Touch ID, or Windows Hello.");
+          throw new Error("Your device doesn't support passkeys.");
         } else {
           throw new Error("Failed to authenticate: " + (credError.message || "Please try again."));
         }
@@ -84,44 +139,45 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
       // ============= STEP 3: Prepare passkey data =============
       const passkeyData = {
         id: credential.id,
-        rawId: arrayBufferToBase64(credential.rawId),
+        rawId: uint8ArrayToBase64(new Uint8Array(credential.rawId)),
         type: credential.type,
         response: {
-          clientDataJSON: arrayBufferToBase64(credential.response.clientDataJSON),
-          authenticatorData: arrayBufferToBase64(credential.response.authenticatorData),
-          signature: arrayBufferToBase64(credential.response.signature)
+          clientDataJSON: uint8ArrayToBase64(new Uint8Array(credential.response.clientDataJSON)),
+          authenticatorData: uint8ArrayToBase64(new Uint8Array(credential.response.authenticatorData)),
+          signature: uint8ArrayToBase64(new Uint8Array(credential.response.signature)),
+          userHandle: credential.response.userHandle ? uint8ArrayToBase64(new Uint8Array(credential.response.userHandle)) : null
         }
-        // ✅ DO NOT include challenge in passkeyData
       };
 
       // ============= STEP 4: Send to backend with challenge =============
-      console.log("📤 Sending login request to server with challenge");
+      console.log("📤 Step 4: Sending login request to server");
+      setSuccess("Verifying authentication...");
 
-      const response = await fetch("https://apis.aboki.xyz/api/auth/login", {
+      const loginResponse = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
           "Accept": "application/json"
         },
         body: JSON.stringify({
-          email,
+          email: email.toLowerCase(),
           passkey: passkeyData,
-          challenge: challengeBase64Url // ✅ SEND CHALLENGE AS SEPARATE FIELD
+          challenge: challenge // ✅ Send the challenge we received from backend
         }),
       });
 
       let data;
       try {
-        const text = await response.text();
+        const text = await loginResponse.text();
         data = text ? JSON.parse(text) : {};
       } catch (parseError) {
         console.error("❌ Failed to parse response:", parseError);
         throw new Error("Server returned invalid response");
       }
 
-      console.log("📥 Login response:", { status: response.status, success: data.success });
+      console.log("📥 Login response:", { status: loginResponse.status, success: data.success });
 
-      if (!response.ok) {
+      if (!loginResponse.ok) {
         const errorMessage = data.error || data.message || "Passkey login failed";
         console.error("❌ Login failed:", errorMessage);
         throw new Error(errorMessage);
@@ -131,7 +187,7 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
         throw new Error("No token received from server");
       }
 
-      // ✅ Extract user data from response
+      // ============= STEP 5: Store user data =============
       const userData = {
         id: data.data.user?._id || "",
         username: data.data.user?.username || "",
@@ -139,9 +195,8 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
         email: data.data.user?.email || email
       };
 
-      console.log("✅ Auth token received, storing user data:", userData.username);
+      console.log("✅ Auth token received, logging in:", userData.username);
 
-      // ✅ Use auth context's login function to store both token and user
       login(data.data.token, userData);
       
       setSuccess("🎉 Welcome back! Logging you in...");
@@ -153,18 +208,6 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary)
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '');
   };
 
   return (
