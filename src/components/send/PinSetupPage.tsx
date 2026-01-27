@@ -7,6 +7,7 @@ import apiClient from "@/lib/api-client";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://apis.aboki.xyz';
 
+// Type definitions
 interface UserData {
   _id: string;
   name: string;
@@ -21,40 +22,41 @@ interface UserData {
   createdAt: string;
 }
 
-export default function PasscodeSetupPage() {
+export default function PinSetupPage() {
   const router = useRouter();
-  const [step, setStep] = useState<"check" | "setup" | "has_passcode" | "loading" | "success" | "error" | "removing">("check");
+  const [step, setStep] = useState<"check" | "setup" | "has_pin" | "loading" | "success" | "error" | "removing">("check");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [userData, setUserData] = useState<UserData | null>(null);
-  const [hasExistingPasscode, setHasExistingPasscode] = useState(false);
-
-  // Passcode input states
-  const [passcodeInput, setPasscodeInput] = useState("");
-  const [passcodeConfirm, setPasscodeConfirm] = useState("");
-  const [showPasscode, setShowPasscode] = useState(false);
+  const [hasExistingPin, setHasExistingPin] = useState(false);
+  const [setupAttempted, setSetupAttempted] = useState(false);
+  
+  // PIN input states
+  const [pinInput, setPinInput] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
+  const [showPin, setShowPin] = useState(false);
   const [step1Complete, setStep1Complete] = useState(false);
 
   // Check if user is authenticated and get profile on mount
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        console.log('🔄 Checking auth and passcode status...');
+        console.log('🔄 Checking auth and PIN status...');
         const response = await apiClient.getUserProfile();
         if (response.success && response.data) {
           const userData = response.data as UserData;
           setUserData(userData);
           
-          // Check if user already has a passcode
-          const userHasPasscode = userData?.verifiedWithPin ? true : false;
-          console.log(`🔐 User has passcode: ${userHasPasscode}`);
+          // Check if user already has a PIN
+          const userHasPin = userData?.verifiedWithPin ? true : false;
+          console.log(`🔐 User has PIN: ${userHasPin}`);
           
-          setHasExistingPasscode(userHasPasscode);
+          setHasExistingPin(userHasPin);
           
-          if (userHasPasscode) {
-            console.log('➡️ Setting step to "has_passcode"');
-            setStep("has_passcode");
+          if (userHasPin) {
+            console.log('➡️ Setting step to "has_pin"');
+            setStep("has_pin");
           } else {
             console.log('➡️ Setting step to "setup"');
             setStep("setup");
@@ -74,8 +76,8 @@ export default function PasscodeSetupPage() {
     checkAuth();
   }, [router]);
 
-  // ============= REMOVE PASSCODE HANDLER =============
-  const handleRemovePasscode = async () => {
+  // ============= REMOVE PIN HANDLER =============
+  const handleRemovePin = async () => {
     if (!userData) {
       setError('User data not available');
       return;
@@ -83,7 +85,7 @@ export default function PasscodeSetupPage() {
 
     setError("");
     setStep("removing");
-    setStatusMessage("Removing existing passcode...");
+    setStatusMessage("Removing existing PIN...");
     setLoading(true);
 
     try {
@@ -101,15 +103,16 @@ export default function PasscodeSetupPage() {
       const removeData = await removeResponse.json();
 
       if (!removeResponse.ok || !removeData.success) {
-        throw new Error(removeData.error || 'Failed to remove passcode');
+        throw new Error(removeData.error || 'Failed to remove PIN');
       }
 
-      console.log('✅ Existing passcode removed');
+      console.log('✅ Existing PIN removed');
       
       // Update state
-      setHasExistingPasscode(false);
-      setPasscodeInput("");
-      setPasscodeConfirm("");
+      setHasExistingPin(false);
+      setSetupAttempted(false);
+      setPinInput("");
+      setPinConfirm("");
       setStep1Complete(false);
       setStep("setup");
       setLoading(false);
@@ -121,34 +124,34 @@ export default function PasscodeSetupPage() {
       }
     } catch (err: any) {
       console.error('❌ Remove error:', err);
-      setError(err.message || 'Failed to remove passcode. Please try again.');
-      setStep("has_passcode");
+      setError(err.message || 'Failed to remove PIN. Please try again.');
+      setStep("has_pin");
       setLoading(false);
     }
   };
 
-  // ============= SETUP PASSCODE HANDLER =============
-  const handleSetupPasscode = async () => {
+  // ============= SETUP PIN HANDLER =============
+  const handleSetupPin = async () => {
     if (!userData) {
       setError('User data not available');
       return;
     }
 
     // Validation
-    if (passcodeInput.length < 4) {
-      setError('Passcode must be at least 4 digits');
+    if (pinInput.length < 4) {
+      setError('PIN must be at least 4 digits');
       return;
     }
 
     if (!step1Complete) {
-      // Step 1: Validate passcode matches
-      if (passcodeInput !== passcodeConfirm) {
-        setError('Passcodes do not match. Please try again.');
+      // Step 1: Validate PIN matches
+      if (pinInput !== pinConfirm) {
+        setError('PINs do not match. Please try again.');
         return;
       }
 
-      if (!/^\d+$/.test(passcodeInput)) {
-        setError('Passcode must contain only numbers');
+      if (!/^\d+$/.test(pinInput)) {
+        setError('PIN must contain only numbers');
         return;
       }
 
@@ -160,11 +163,12 @@ export default function PasscodeSetupPage() {
     // Step 2: Send to backend
     setError("");
     setStep("loading");
+    setSetupAttempted(true);
     setLoading(true);
 
     try {
-      console.log('📝 Setting up passcode...');
-      setStatusMessage("Setting up your passcode...");
+      console.log('📝 Setting up PIN...');
+      setStatusMessage("Setting up your PIN...");
 
       const setupResponse = await fetch(
         `${API_BASE_URL}/api/auth/pin/setup`,
@@ -175,7 +179,7 @@ export default function PasscodeSetupPage() {
             'Authorization': `Bearer ${apiClient.getToken()}`
           },
           body: JSON.stringify({
-            pin: passcodeInput
+            pin: pinInput
           })
         }
       );
@@ -183,24 +187,25 @@ export default function PasscodeSetupPage() {
       const setupData = await setupResponse.json();
 
       if (!setupResponse.ok || !setupData.success) {
-        if (setupData.error && setupData.error.includes('already have')) {
-          setStep("has_passcode");
-          setError('You already have a passcode. Please remove it first.');
+        if (setupData.error && setupData.error.includes('already have a pin')) {
+          setStep("has_pin");
+          setError('You already have a PIN. Please remove it first.');
           setLoading(false);
           return;
         }
-        throw new Error(setupData.error || 'Failed to setup passcode');
+        throw new Error(setupData.error || 'Failed to setup PIN');
       }
 
-      console.log('✅ Passcode saved successfully!');
+      console.log('✅ PIN saved successfully!');
       setStep("success");
+      setSetupAttempted(false);
       setLoading(false);
 
       // Refresh user data
       const refreshResponse = await apiClient.getUserProfile();
       if (refreshResponse.success && refreshResponse.data) {
         setUserData(refreshResponse.data as UserData);
-        setHasExistingPasscode(true);
+        setHasExistingPin(true);
       }
 
       // Redirect after 3 seconds
@@ -210,7 +215,7 @@ export default function PasscodeSetupPage() {
 
     } catch (err: any) {
       console.error('❌ Setup error:', err);
-      setError(err.message || 'Failed to setup passcode. Please try again.');
+      setError(err.message || 'Failed to setup PIN. Please try again.');
       setStep("error");
       setLoading(false);
     }
@@ -244,8 +249,8 @@ export default function PasscodeSetupPage() {
           </h1>
         </div>
 
-        {/* HAS EXISTING PASSCODE STEP */}
-        {step === "has_passcode" && (
+        {/* HAS EXISTING PIN STEP */}
+        {step === "has_pin" && (
           <div className="space-y-6">
             {/* Status Message */}
             <div className="bg-green-50 dark:bg-green-900/20 rounded-2xl p-6 border-2 border-green-200 dark:border-green-800">
@@ -253,10 +258,10 @@ export default function PasscodeSetupPage() {
                 <CheckCircleIcon className="w-6 h-6 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
                 <div>
                   <p className="font-bold text-green-900 dark:text-green-300 mb-2">
-                    Passcode Already Active
+                    PIN Already Active
                   </p>
                   <p className="text-sm text-green-700 dark:text-green-400">
-                    You already have a passcode registered. Your transactions are secured with PIN protection.
+                    You already have a PIN registered. Your transactions are secured with PIN verification.
                   </p>
                 </div>
               </div>
@@ -271,14 +276,14 @@ export default function PasscodeSetupPage() {
 
             {/* Info Box */}
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-5 border border-blue-200 dark:border-blue-800">
-              <h3 className="font-bold text-blue-900 dark:text-blue-300 mb-3">Want to change your passcode?</h3>
+              <h3 className="font-bold text-blue-900 dark:text-blue-300 mb-3">Want to change your PIN?</h3>
               <p className="text-sm text-blue-700 dark:text-blue-400 mb-3">
-                You can remove your current passcode and set up a new one. This is useful if:
+                You can remove your current PIN and set up a new one. This is useful if:
               </p>
               <ul className="space-y-2 text-sm text-blue-700 dark:text-blue-400">
                 <li className="flex items-start gap-2">
                   <span>•</span>
-                  <span>You forgot your passcode</span>
+                  <span>You forgot your PIN</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span>•</span>
@@ -293,7 +298,7 @@ export default function PasscodeSetupPage() {
 
             {/* Remove Button */}
             <button
-              onClick={handleRemovePasscode}
+              onClick={handleRemovePin}
               disabled={loading}
               className="w-full py-4 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -305,7 +310,7 @@ export default function PasscodeSetupPage() {
               ) : (
                 <>
                   <TrashIcon className="w-5 h-5" />
-                  Remove Current Passcode
+                  Remove Current PIN
                 </>
               )}
             </button>
@@ -322,7 +327,7 @@ export default function PasscodeSetupPage() {
           </div>
         )}
 
-        {/* REMOVING PASSCODE STEP */}
+        {/* REMOVING PIN STEP */}
         {step === "removing" && (
           <div className="text-center space-y-6">
             <div className="relative w-24 h-24 mx-auto">
@@ -352,12 +357,12 @@ export default function PasscodeSetupPage() {
                 <ShieldCheckIcon className="w-6 h-6 text-purple-600 dark:text-purple-400 mt-0.5 shrink-0" />
                 <div>
                   <p className="font-bold text-purple-900 dark:text-purple-300 mb-2">
-                    {hasExistingPasscode ? 'Set Up New Passcode' : `Welcome, ${userData?.name || 'User'}!`}
+                    {hasExistingPin ? 'Set Up New PIN' : `Welcome, ${userData?.name || 'User'}!`}
                   </p>
                   <p className="text-sm text-purple-700 dark:text-purple-400">
-                    {hasExistingPasscode 
-                      ? 'Your old passcode has been removed. Now set up a new one to secure your account.'
-                      : 'Set up a secure passcode to protect your funds and verify transactions.'
+                    {hasExistingPin 
+                      ? 'Your old PIN has been removed. Now set up a new one to secure your account.'
+                      : 'Set up a secure PIN to protect your funds and verify transactions.'
                     }
                   </p>
                 </div>
@@ -373,7 +378,7 @@ export default function PasscodeSetupPage() {
 
             {/* Info Box */}
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-5 border border-blue-200 dark:border-blue-800">
-              <h3 className="font-bold text-blue-900 dark:text-blue-300 mb-3">What is a passcode?</h3>
+              <h3 className="font-bold text-blue-900 dark:text-blue-300 mb-3">What is a PIN?</h3>
               <ul className="space-y-2 text-sm text-blue-700 dark:text-blue-400">
                 <li className="flex items-start gap-2">
                   <span>✓</span>
@@ -394,29 +399,29 @@ export default function PasscodeSetupPage() {
               </ul>
             </div>
 
-            {/* Passcode Input Section */}
+            {/* PIN Input Section */}
             {!step1Complete ? (
               <div className="space-y-4">
-                {/* First Passcode Input */}
+                {/* First PIN Input */}
                 <div>
                   <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">
-                    Create Your Passcode
+                    Create Your PIN
                   </label>
                   <div className="relative">
                     <input
-                      type={showPasscode ? "text" : "password"}
-                      value={passcodeInput}
-                      onChange={(e) => setPasscodeInput(e.target.value.replace(/\D/g, ''))}
+                      type={showPin ? "text" : "password"}
+                      value={pinInput}
+                      onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
                       placeholder="Enter 4+ digits"
                       maxLength={10}
                       className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-purple-500 focus:outline-none text-center text-2xl tracking-widest font-bold"
                     />
                     <button
                       type="button"
-                      onClick={() => setShowPasscode(!showPasscode)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-sm"
+                      onClick={() => setShowPin(!showPin)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                     >
-                      {showPasscode ? "Hide" : "Show"}
+                      {showPin ? "Hide" : "Show"}
                     </button>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
@@ -424,34 +429,34 @@ export default function PasscodeSetupPage() {
                   </p>
                 </div>
 
-                {/* Confirm Passcode Input */}
+                {/* Confirm PIN Input */}
                 <div>
                   <label className="block text-sm font-bold text-slate-900 dark:text-white mb-2">
-                    Confirm Your Passcode
+                    Confirm Your PIN
                   </label>
                   <input
-                    type={showPasscode ? "text" : "password"}
-                    value={passcodeConfirm}
-                    onChange={(e) => setPasscodeConfirm(e.target.value.replace(/\D/g, ''))}
-                    placeholder="Re-enter passcode"
+                    type={showPin ? "text" : "password"}
+                    value={pinConfirm}
+                    onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Re-enter PIN"
                     maxLength={10}
                     className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-purple-500 focus:outline-none text-center text-2xl tracking-widest font-bold"
                   />
                 </div>
 
-                {/* Passcode Strength Indicator */}
-                {passcodeInput && (
+                {/* PIN Strength Indicator */}
+                {pinInput && (
                   <div className="bg-slate-100 dark:bg-slate-800 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <LockClosedIcon className="w-4 h-4 text-slate-600 dark:text-slate-400" />
-                      <span className="text-xs font-bold text-slate-600 dark:text-slate-400">Passcode Strength</span>
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-400">PIN Strength</span>
                     </div>
                     <div className="flex gap-1">
                       {[1, 2, 3, 4].map((i) => (
                         <div
                           key={i}
                           className={`flex-1 h-2 rounded-full transition-colors ${
-                            passcodeInput.length >= i * 2
+                            pinInput.length >= i * 2
                               ? 'bg-green-500'
                               : 'bg-slate-300 dark:bg-slate-600'
                           }`}
@@ -459,15 +464,15 @@ export default function PasscodeSetupPage() {
                       ))}
                     </div>
                     <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">
-                      {passcodeInput.length < 4 ? 'Too short' : 'Strong Passcode ✓'}
+                      {pinInput.length < 4 ? 'Too short' : 'Strong PIN ✓'}
                     </p>
                   </div>
                 )}
 
                 {/* Continue Button */}
                 <button
-                  onClick={handleSetupPasscode}
-                  disabled={passcodeInput.length < 4 || !passcodeConfirm}
+                  onClick={handleSetupPin}
+                  disabled={pinInput.length < 4 || !pinConfirm}
                   className="w-full py-4 rounded-xl bg-[#D364DB] hover:bg-[#C554CB] text-white font-bold text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   <LockClosedIcon className="w-5 h-5" />
@@ -479,11 +484,11 @@ export default function PasscodeSetupPage() {
                 <div className="w-16 h-16 mx-auto bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
                   <CheckCircleIcon className="w-10 h-10 text-green-600 dark:text-green-400" />
                 </div>
-                <p className="font-bold text-slate-900 dark:text-white">Passcode confirmed!</p>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Click the button below to finalize your passcode setup.</p>
+                <p className="font-bold text-slate-900 dark:text-white">PIN confirmed!</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Click the button below to finalize your PIN setup.</p>
                 
                 <button
-                  onClick={handleSetupPasscode}
+                  onClick={handleSetupPin}
                   disabled={loading}
                   className="w-full py-4 rounded-xl bg-[#D364DB] hover:bg-[#C554CB] text-white font-bold text-base shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
@@ -495,7 +500,7 @@ export default function PasscodeSetupPage() {
                   ) : (
                     <>
                       <LockClosedIcon className="w-5 h-5" />
-                      Finalize Passcode Setup
+                      Finalize PIN Setup
                     </>
                   )}
                 </button>
@@ -507,7 +512,7 @@ export default function PasscodeSetupPage() {
                   }}
                   className="w-full py-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-medium text-sm transition-all"
                 >
-                  Change Passcode
+                  Change PIN
                 </button>
               </div>
             )}
@@ -556,7 +561,7 @@ export default function PasscodeSetupPage() {
                 All Set! ✓
               </h2>
               <p className="text-slate-600 dark:text-slate-400 mb-4">
-                Your passcode is ready. You can now transfer funds with passcode verification.
+                Your PIN is ready. You can now transfer funds with PIN verification.
               </p>
               <p className="text-sm text-slate-500 dark:text-slate-500">
                 Redirecting to dashboard...
@@ -584,8 +589,8 @@ export default function PasscodeSetupPage() {
               onClick={() => {
                 setError("");
                 setStep("setup");
-                setPasscodeInput("");
-                setPasscodeConfirm("");
+                setPinInput("");
+                setPinConfirm("");
                 setStep1Complete(false);
               }}
               className="w-full py-4 rounded-xl bg-[#D364DB] hover:bg-[#C554CB] text-white font-bold text-base shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"

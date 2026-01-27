@@ -1,4 +1,4 @@
-// ============= src/components/ReviewPaymentContent.tsx (COMPLETE FIXED) =============
+// ============= src/components/ReviewPaymentContent.tsx (PIN VERIFICATION VERSION) =============
 "use client"
 
 import { useState, Suspense } from "react";
@@ -9,11 +9,10 @@ import {
   CheckCircleIcon,
   ExclamationCircleIcon,
   ArrowPathIcon,
-  FingerPrintIcon,
+  LockClosedIcon,
   ShieldCheckIcon
 } from "@heroicons/react/24/outline";
 import apiClient from "@/lib/api-client";
-import passkeyClient from "@/lib/passkey-client";
 
 function ReviewPaymentContent() {
   const searchParams = useSearchParams();
@@ -32,8 +31,13 @@ function ReviewPaymentContent() {
   const [success, setSuccess] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
-  const [passkeyVerified, setPasskeyVerified] = useState(false);
+  const [pinVerified, setPinVerified] = useState(false);
   const [verificationToken, setVerificationToken] = useState<string | null>(null);
+  
+  // PIN input state
+  const [pinInput, setPinInput] = useState("");
+  const [showPin, setShowPin] = useState(false);
+  const [pinAttempts, setPinAttempts] = useState(0);
 
   // Determine back link based on source
   let backLink = `/send/amount?username=${username}&avatar=${avatar}&source=${source}`;
@@ -41,37 +45,21 @@ function ReviewPaymentContent() {
     backLink = `/send/amount?username=${encodeURIComponent(username)}&avatar=${avatar}&source=crypto&fullAddress=${encodeURIComponent(fullAddress)}`;
   }
 
-  // ============= HELPER: Convert base64url to ArrayBuffer =============
-  const base64UrlToArrayBuffer = (base64url: string): ArrayBuffer => {
-    const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
-    const padding = '='.repeat((4 - (base64.length % 4)) % 4);
-    const paddedBase64 = base64 + padding;
-    
-    const binaryString = atob(paddedBase64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    
-    return bytes.buffer;
-  };
-
-  // ============= PASSKEY VERIFICATION FUNCTION =============
-
-  const handlePasskeyVerification = async (): Promise<boolean> => {
+  // ============= PIN VERIFICATION FUNCTION =============
+  const handlePinVerification = async (pin: string): Promise<boolean> => {
     setIsVerifying(true);
     setError(null);
 
     try {
-      if (!passkeyClient.isSupported()) {
-        setError("Passkey authentication is not supported in this browser. Please use a modern browser with biometric support.");
+      if (!pin || pin.length < 4) {
+        setError("PIN must be at least 4 digits");
         setIsVerifying(false);
         return false;
       }
 
-      console.log("🔐 Starting passkey verification...");
+      console.log("🔐 Starting PIN verification...");
 
-      // ============= STEP 1: Get Transaction Verification Options =============
+      // ============= STEP 1: Request verification options =============
       const transactionType = source === "crypto" ? "withdraw" : "send";
       
       console.log('📱 Requesting verification options:', {
@@ -81,7 +69,7 @@ function ReviewPaymentContent() {
       });
 
       const optionsResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://apis.aboki.xyz'}/api/auth/passkey/transaction-verify-options`,
+        `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://apis.aboki.xyz'}/api/auth/pin/transaction-verify-options`,
         {
           method: "POST",
           headers: {
@@ -106,80 +94,18 @@ function ReviewPaymentContent() {
       }
 
       const optionsData = await optionsResponse.json();
-      console.log('✅ Verification options received:', {
-        transactionId: optionsData.data.transactionId,
-        rpId: optionsData.data.rpId
-      });
+      console.log('✅ Verification options received');
 
-      // ============= STEP 2: Perform Biometric Authentication =============
-      // ✅ FIXED: Convert challenge from base64url to ArrayBuffer
-      const challengeBuffer = base64UrlToArrayBuffer(optionsData.data.options.challenge);
-
-      // ✅ FIXED: Convert allowCredentials IDs from base64url to ArrayBuffer
-      const allowCredentials = optionsData.data.options.allowCredentials?.map((cred: any) => ({
-        ...cred,
-        id: base64UrlToArrayBuffer(cred.id)
-      }));
-
-      console.log('👆 Requesting biometric authentication...', {
-        challengeLength: challengeBuffer.byteLength,
-        credentialsCount: allowCredentials?.length || 0
-      });
-
-      let credential: PublicKeyCredential | null = null;
-      
-      try {
-        credential = await navigator.credentials.get({
-          publicKey: {
-            ...optionsData.data.options,
-            challenge: challengeBuffer as BufferSource,
-            allowCredentials: allowCredentials
-          }
-        }) as PublicKeyCredential;
-      } catch (credError: any) {
-        console.error('❌ Biometric auth error:', credError);
-        if (credError.name === 'NotAllowedError') {
-          setError("Biometric verification was cancelled or failed");
-        } else {
-          setError(`Biometric authentication failed: ${credError.message}`);
-        }
-        setIsVerifying(false);
-        return false;
-      }
-
-      if (!credential) {
-        setError("Passkey verification was cancelled");
-        setIsVerifying(false);
-        return false;
-      }
-
-      console.log('✅ Biometric authentication successful');
-
-      // ============= STEP 3: Send Assertion to Backend for Verification =============
-      const response = credential.response as AuthenticatorAssertionResponse;
-
+      // ============= STEP 2: Verify PIN with backend =============
       const verifyPayload = {
         transactionId: optionsData.data.transactionId,
-        authenticationResponse: {
-          id: credential.id,
-          rawId: Array.from(new Uint8Array(credential.rawId)),
-          response: {
-            clientDataJSON: Array.from(new Uint8Array(response.clientDataJSON)),
-            authenticatorData: Array.from(new Uint8Array(response.authenticatorData)),
-            signature: Array.from(new Uint8Array(response.signature)),
-            userHandle: response.userHandle 
-              ? Array.from(new Uint8Array(response.userHandle))
-              : null
-          },
-          type: credential.type,
-          transactionId: optionsData.data.transactionId
-        }
+        pin: pin
       };
 
-      console.log('🔐 Verifying passkey signature with backend...');
+      console.log('🔐 Verifying PIN with backend...');
 
       const verifyResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://apis.aboki.xyz'}/api/auth/passkey/transaction-verify`,
+        `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://apis.aboki.xyz'}/api/auth/pin/transaction-verify`,
         {
           method: "POST",
           headers: {
@@ -193,7 +119,17 @@ function ReviewPaymentContent() {
       if (!verifyResponse.ok) {
         const errorData = await verifyResponse.json();
         console.error('❌ Verification failed:', errorData);
-        setError(errorData.error || "Passkey verification failed");
+        
+        // Increment PIN attempts
+        const newAttempts = pinAttempts + 1;
+        setPinAttempts(newAttempts);
+
+        if (newAttempts >= 3) {
+          setError("Too many incorrect PIN attempts. Please try again later.");
+        } else {
+          setError(`Incorrect PIN. ${3 - newAttempts} attempts remaining.`);
+        }
+        
         setIsVerifying(false);
         return false;
       }
@@ -207,36 +143,33 @@ function ReviewPaymentContent() {
         return false;
       }
 
-      // ============= STEP 4: Store Verification Token =============
-      console.log('✅ Verification token received');
+      // ============= STEP 3: Store verification token =============
+      console.log('✅ PIN verification successful');
       
-      apiClient.setPasskeyVerificationToken(verifyData.data.verificationToken);
+      apiClient.setPinVerificationToken(verifyData.data.verificationToken);
       setVerificationToken(verifyData.data.verificationToken);
 
-      console.log('✅ Passkey verification successful');
-      
-      setPasskeyVerified(true);
+      setPinVerified(true);
+      setPinInput("");
       setIsVerifying(false);
       return true;
 
     } catch (err: any) {
-      console.error("❌ Passkey verification error:", err);
-      console.error("Stack:", err.stack);
-      setError(err.message || "Passkey verification failed");
+      console.error("❌ PIN verification error:", err);
+      setError(err.message || "PIN verification failed");
       setIsVerifying(false);
       return false;
     }
   };
 
   // ============= SEND TRANSACTION FUNCTION =============
-
   const handleSend = async () => {
-    // ============= VERIFY WITH PASSKEY FIRST =============
-    if (!passkeyVerified) {
-      console.log('🔐 Passkey not verified - requesting verification...');
-      const verified = await handlePasskeyVerification();
+    // ============= VERIFY WITH PIN FIRST =============
+    if (!pinVerified) {
+      console.log('🔐 PIN not verified - requesting verification...');
+      const verified = await handlePinVerification(pinInput);
       if (!verified) {
-        console.error('❌ Passkey verification failed');
+        console.error('❌ PIN verification failed');
         return;
       }
     }
@@ -254,19 +187,19 @@ function ReviewPaymentContent() {
         return;
       }
 
-      const passKeyToken = passkeyClient.getVerificationToken();
-      if (!passKeyToken) {
+      const pinToken = apiClient.getPinVerificationToken();
+      if (!pinToken) {
         console.warn('⚠️ Verification token missing - requesting re-verification');
-        setPasskeyVerified(false);
+        setPinVerified(false);
         setError("Verification expired. Please verify again.");
         
         setIsProcessing(false);
-        const verified = await handlePasskeyVerification();
+        const verified = await handlePinVerification(pinInput);
         if (!verified) return;
         setIsProcessing(true);
       }
 
-      console.log('📡 Sending transaction with passkey verification...');
+      console.log('📡 Sending transaction with PIN verification...');
 
       let response;
 
@@ -281,7 +214,7 @@ function ReviewPaymentContent() {
         console.log("🔷 Sending to external wallet:", {
           address: fullAddress.slice(0, 10) + '...',
           amount: parseFloat(amount),
-          hasVerificationToken: !!passKeyToken
+          hasVerificationToken: !!pinToken
         });
 
         response = await apiClient.sendToExternal({
@@ -297,7 +230,7 @@ function ReviewPaymentContent() {
         console.log("👤 Sending to username:", {
           username: cleanUsername,
           amount: parseFloat(amount),
-          hasVerificationToken: !!passKeyToken
+          hasVerificationToken: !!pinToken
         });
 
         response = await apiClient.sendToUsername({
@@ -314,8 +247,7 @@ function ReviewPaymentContent() {
         setTxHash(response.data.transactionHash);
         setExplorerUrl(response.data.explorerUrl || null);
 
-        passkeyClient.clearVerificationToken();
-        apiClient.clearPasskeyVerificationToken();
+        apiClient.clearPinVerificationToken();
 
         setTimeout(() => {
           router.push(`/send/success?txHash=${response.data!.transactionHash}&amount=${amount}&to=${username}`);
@@ -323,28 +255,27 @@ function ReviewPaymentContent() {
       } else {
         console.error('❌ Transaction failed:', response.error);
         
-        if (response.error?.includes('verification') || response.error?.includes('PASSKEY')) {
-          setPasskeyVerified(false);
+        if (response.error?.includes('verification') || response.error?.includes('PIN')) {
+          setPinVerified(false);
           setError("Transaction verification expired. Please verify again.");
         } else {
           setError(response.error || "Transaction failed");
         }
 
-        apiClient.clearPasskeyVerificationToken();
+        apiClient.clearPinVerificationToken();
       }
     } catch (err: any) {
       console.error("❌ Send error:", err);
       setError(err.message || "An unexpected error occurred");
       
-      apiClient.clearPasskeyVerificationToken();
-      setPasskeyVerified(false);
+      apiClient.clearPinVerificationToken();
+      setPinVerified(false);
     } finally {
       setIsProcessing(false);
     }
   };
 
   // ============= JSX RENDER =============
-
   return (
     <div className="w-full max-w-[1080px] mx-auto h-screen bg-[#F6EDFF]/50 dark:bg-[#252525] transition-colors duration-300 flex flex-col">
       
@@ -368,7 +299,7 @@ function ReviewPaymentContent() {
               <ExclamationCircleIcon className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="font-bold text-red-900 dark:text-red-200 text-sm mb-1">
-                  {passkeyVerified ? "Transaction Failed" : "Verification Failed"}
+                  {pinVerified ? "Transaction Failed" : "Verification Failed"}
                 </p>
                 <p className="text-red-700 dark:text-red-300 text-sm">
                   {error}
@@ -392,13 +323,13 @@ function ReviewPaymentContent() {
             </div>
           )}
 
-          {/* Passkey Verification Status */}
-          {passkeyVerified && !success && (
+          {/* PIN Verification Status */}
+          {pinVerified && !success && (
             <div className="w-full max-w-md mb-6 p-4 bg-green-100 dark:bg-green-900/30 border-2 border-green-500 rounded-2xl flex items-center gap-3">
               <ShieldCheckIcon className="w-6 h-6 text-green-600 dark:text-green-400" />
               <div className="flex-1">
                 <p className="font-bold text-green-900 dark:text-green-200 text-sm">
-                  Verified with Biometric ✓
+                  Verified with PIN ✓
                 </p>
                 <p className="text-green-700 dark:text-green-300 text-xs">
                   Transaction authenticated and ready to send
@@ -450,13 +381,13 @@ function ReviewPaymentContent() {
             {/* Security Info */}
             <div className="mb-6 pb-6 border-b border-slate-200 dark:border-slate-700">
               <div className="flex items-center gap-2 mb-2">
-                <FingerPrintIcon className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                <LockClosedIcon className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                 <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Security</span>
               </div>
               <p className="text-sm text-slate-700 dark:text-slate-200">
-                {passkeyVerified 
-                  ? "✓ Verified with biometric authentication" 
-                  : "Requires biometric verification to proceed"
+                {pinVerified 
+                  ? "✓ Verified with PIN authentication" 
+                  : "Requires PIN verification to proceed"
                 }
               </p>
             </div>
@@ -486,6 +417,37 @@ function ReviewPaymentContent() {
             </div>
           </div>
 
+          {/* PIN Input Section (if not verified) */}
+          {!pinVerified && (
+            <div className="w-full max-w-md mb-6 bg-white dark:bg-[#3D3D3D] border-2 border-purple-200 dark:border-purple-800 rounded-3xl p-6">
+              <h3 className="font-bold text-slate-900 dark:text-white mb-4">Enter PIN to Verify</h3>
+              
+              <div className="relative mb-4">
+                <input
+                  type={showPin ? "text" : "password"}
+                  value={pinInput}
+                  onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                  placeholder="Enter your 4+ digit PIN"
+                  maxLength={10}
+                  disabled={isVerifying}
+                  className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-purple-500 focus:outline-none text-center text-2xl tracking-widest font-bold disabled:opacity-50"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPin(!showPin)}
+                  disabled={isVerifying}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 disabled:opacity-50"
+                >
+                  {showPin ? "Hide" : "Show"}
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
+                {pinAttempts > 0 && pinAttempts < 3 && `${3 - pinAttempts} attempt${3 - pinAttempts > 1 ? 's' : ''} remaining`}
+              </p>
+            </div>
+          )}
+
           {/* Transaction Hash (if processing or success) */}
           {(isProcessing || txHash) && (
             <div className="w-full max-w-md mb-4 p-4 bg-slate-100 dark:bg-slate-800 rounded-2xl">
@@ -514,13 +476,13 @@ function ReviewPaymentContent() {
           <div className="w-full max-w-md mb-6">
             <button 
               onClick={handleSend}
-              disabled={isProcessing || isVerifying || success}
+              disabled={isProcessing || isVerifying || success || (!pinVerified && pinInput.length < 4)}
               className="w-full py-4 rounded-2xl bg-[#D364DB] text-white font-bold text-lg shadow-[4px_4px_0px_0px_rgba(15,23,42,1)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.8)] hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(15,23,42,1)] active:translate-y-0 active:shadow-none transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none flex items-center justify-center gap-2"
             >
               {isVerifying ? (
                 <>
-                  <FingerPrintIcon className="w-5 h-5 animate-pulse" />
-                  Verifying Biometric...
+                  <LockClosedIcon className="w-5 h-5 animate-pulse" />
+                  Verifying PIN...
                 </>
               ) : isProcessing ? (
                 <>
@@ -532,23 +494,23 @@ function ReviewPaymentContent() {
                   <CheckCircleIcon className="w-5 h-5" />
                   Sent Successfully
                 </>
-              ) : passkeyVerified ? (
+              ) : pinVerified ? (
                 <>
                   <ShieldCheckIcon className="w-5 h-5" />
                   Send Payment (FREE)
                 </>
               ) : (
                 <>
-                  <FingerPrintIcon className="w-5 h-5" />
+                  <LockClosedIcon className="w-5 h-5" />
                   Verify & Send (FREE)
                 </>
               )}
             </button>
 
             <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-4">
-              {passkeyVerified 
+              {pinVerified 
                 ? "Your transaction is verified. Click to complete the transfer."
-                : "Biometric verification is required for your security"
+                : "PIN verification is required for your security"
               }
             </p>
           </div>

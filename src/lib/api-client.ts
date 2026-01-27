@@ -1,5 +1,5 @@
-// ============= lib/api-client.ts (PRODUCTION READY) =============
-// API Client for Aboki Backend with Enhanced Token Management
+// ============= lib/api-client.ts (PRODUCTION READY - WITH PIN SUPPORT) =============
+// API Client for Aboki Backend with Enhanced Token Management (Passkey + PIN)
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://apis.aboki.xyz';
 
@@ -28,9 +28,11 @@ class ApiClient {
   private baseUrl: string;
   private token: string | null = null;
   private passkeyVerificationToken: TokenData | null = null;
+  private pinVerificationToken: TokenData | null = null;
   
   // Token configuration
   private readonly PASSKEY_TOKEN_LIFETIME = 5 * 60 * 1000; // 5 minutes
+  private readonly PIN_TOKEN_LIFETIME = 5 * 60 * 1000; // 5 minutes
   private readonly TOKEN_EXPIRY_WARNING = 30000; // 30 seconds
 
   constructor(baseUrl: string) {
@@ -39,6 +41,7 @@ class ApiClient {
     if (typeof window !== 'undefined') {
       this.token = localStorage.getItem('aboki_auth_token');
       this.loadPasskeyToken();
+      this.loadPinToken();
     }
   }
 
@@ -145,6 +148,104 @@ class ApiClient {
     return Math.max(0, this.passkeyVerificationToken.expiresAt - Date.now());
   }
 
+  // ============= PIN TOKEN MANAGEMENT (NEW) =============
+
+  /**
+   * Store PIN verification token (from backend after PIN verification)
+   */
+  setPinVerificationToken(token: string) {
+    const expiresAt = Date.now() + this.PIN_TOKEN_LIFETIME;
+    
+    this.pinVerificationToken = { token, expiresAt };
+    
+    // Use sessionStorage for short-lived tokens (better security)
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('pin_verification_token', JSON.stringify({
+        token,
+        expiresAt
+      }));
+    }
+    
+    console.log('✅ PIN token stored (expires in 5 min)');
+  }
+
+  /**
+   * Load PIN token from storage (called on init)
+   */
+  private loadPinToken() {
+    if (typeof window === 'undefined') return;
+    
+    const stored = sessionStorage.getItem('pin_verification_token');
+    if (!stored) return;
+    
+    try {
+      const tokenData: TokenData = JSON.parse(stored);
+      
+      // Check if token is still valid
+      if (Date.now() < tokenData.expiresAt) {
+        this.pinVerificationToken = tokenData;
+        console.log('✅ Valid PIN token loaded from storage');
+      } else {
+        console.log('⚠️ Stored PIN token expired, clearing');
+        this.clearPinVerificationToken();
+      }
+    } catch (error) {
+      console.error('❌ Failed to parse stored PIN token:', error);
+      this.clearPinVerificationToken();
+    }
+  }
+
+  /**
+   * Get PIN verification token with expiration check
+   */
+  getPinVerificationToken(): string | null {
+    // Check expiration before returning
+    if (!this.pinVerificationToken) {
+      this.loadPinToken();
+    }
+    
+    if (this.pinVerificationToken) {
+      if (Date.now() < this.pinVerificationToken.expiresAt) {
+        return this.pinVerificationToken.token;
+      } else {
+        console.warn('⚠️ PIN token expired');
+        this.clearPinVerificationToken();
+        return null;
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Clear PIN verification token
+   */
+  clearPinVerificationToken() {
+    this.pinVerificationToken = null;
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('pin_verification_token');
+    }
+    console.log('🗑️ PIN token cleared');
+  }
+
+  /**
+   * Check if PIN token is expiring soon
+   */
+  isPinTokenExpiringSoon(thresholdMs: number = this.TOKEN_EXPIRY_WARNING): boolean {
+    if (!this.pinVerificationToken) return true;
+    
+    const timeRemaining = this.pinVerificationToken.expiresAt - Date.now();
+    return timeRemaining < thresholdMs;
+  }
+
+  /**
+   * Get time remaining for PIN token (in milliseconds)
+   */
+  getPinTokenTimeRemaining(): number {
+    if (!this.pinVerificationToken) return 0;
+    return Math.max(0, this.pinVerificationToken.expiresAt - Date.now());
+  }
+
   // ============= HTTP REQUEST HANDLER =============
 
   private async request<T>(
@@ -182,6 +283,21 @@ class ApiClient {
       });
     }
 
+    // Add PIN token with validation (NEW)
+    const pinToken = this.getPinVerificationToken();
+    if (pinToken) {
+      // Warn if token is expiring soon
+      if (this.isPinTokenExpiringSoon()) {
+        console.warn('⚠️ PIN token expiring soon, request may fail');
+      }
+      
+      headers['X-PIN-Verified-Token'] = pinToken;
+      console.log('✅ PIN token added to request', {
+        endpoint,
+        timeRemaining: `${Math.round(this.getPinTokenTimeRemaining() / 1000)}s`
+      });
+    }
+
     try {
       const response = await fetch(url, {
         ...options,
@@ -192,9 +308,15 @@ class ApiClient {
 
       if (!response.ok) {
         // Handle token expiration errors
-        if (response.status === 401 && data.code === 'PASSKEY_VERIFICATION_REQUIRED') {
-          this.clearPasskeyVerificationToken();
-          console.error('❌ Passkey token invalid or expired');
+        if (response.status === 401) {
+          if (data.code === 'PASSKEY_VERIFICATION_REQUIRED') {
+            this.clearPasskeyVerificationToken();
+            console.error('❌ Passkey token invalid or expired');
+          }
+          if (data.code === 'PIN_VERIFICATION_REQUIRED') {
+            this.clearPinVerificationToken();
+            console.error('❌ PIN token invalid or expired');
+          }
         }
         
         console.error('❌ API Error:', {
@@ -254,6 +376,8 @@ class ApiClient {
       smartAccountAddress: string;
       network: string;
     };
+    verifiedWithPin?: boolean;
+    verifiedWithPasskey?: boolean;
     createdAt: string;
   }>> {
     return this.get('/api/users/me');
@@ -333,7 +457,7 @@ class ApiClient {
 
   /**
    * Send USDC to another user by username
-   * ✅ REQUIRES PASSKEY VERIFICATION TOKEN
+   * ✅ REQUIRES PIN OR PASSKEY VERIFICATION TOKEN
    */
   async sendToUsername(params: {
     username: string;
@@ -347,15 +471,17 @@ class ApiClient {
     transactionHash: string;
     explorerUrl: string;
     gasSponsored: boolean;
-    verifiedWithPasskey: boolean;
+    verifiedWithPin?: boolean;
+    verifiedWithPasskey?: boolean;
     message?: string;
   }>> {
-    const token = this.getPasskeyVerificationToken();
+    const pinToken = this.getPinVerificationToken();
+    const passkeyToken = this.getPasskeyVerificationToken();
     
-    if (!token) {
+    if (!pinToken && !passkeyToken) {
       return {
         success: false,
-        error: 'Passkey verification required for transfers'
+        error: 'PIN or Passkey verification required for transfers'
       };
     }
     
@@ -364,7 +490,7 @@ class ApiClient {
 
   /**
    * Send USDC to external wallet
-   * ✅ REQUIRES PASSKEY VERIFICATION TOKEN
+   * ✅ REQUIRES PIN OR PASSKEY VERIFICATION TOKEN
    */
   async sendToExternal(params: {
     address: string;
@@ -378,14 +504,16 @@ class ApiClient {
     transactionHash: string;
     explorerUrl: string;
     gasSponsored: boolean;
-    verifiedWithPasskey: boolean;
+    verifiedWithPin?: boolean;
+    verifiedWithPasskey?: boolean;
   }>> {
-    const token = this.getPasskeyVerificationToken();
+    const pinToken = this.getPinVerificationToken();
+    const passkeyToken = this.getPasskeyVerificationToken();
     
-    if (!token) {
+    if (!pinToken && !passkeyToken) {
       return {
         success: false,
-        error: 'Passkey verification required for transfers'
+        error: 'PIN or Passkey verification required for transfers'
       };
     }
     
@@ -548,8 +676,8 @@ class ApiClient {
   }
 
   /**
-   * Confirm account and sign with passkey
-   * ✅ REQUIRES VALID PASSKEY VERIFICATION TOKEN
+   * Confirm account and sign with PIN or Passkey
+   * ✅ REQUIRES VALID PIN OR PASSKEY VERIFICATION TOKEN
    */
   async confirmOfframpAndSign(params: {
     transactionReference: string;
@@ -563,19 +691,25 @@ class ApiClient {
     accountName: string;
     lencoTransactionId: string;
     estimatedTime: string;
-    verifiedWithPasskey: boolean;
+    verifiedWithPin?: boolean;
+    verifiedWithPasskey?: boolean;
   }>> {
     // Validate token before making request
-    const token = this.getPasskeyVerificationToken();
+    const pinToken = this.getPinVerificationToken();
+    const passkeyToken = this.getPasskeyVerificationToken();
     
-    if (!token) {
+    if (!pinToken && !passkeyToken) {
       return {
         success: false,
-        error: 'Passkey verification token missing or expired. Please verify again.'
+        error: 'PIN or Passkey verification token missing or expired. Please verify again.'
       };
     }
     
-    if (this.isPasskeyTokenExpiringSoon(10000)) {
+    if (pinToken && this.isPinTokenExpiringSoon(10000)) {
+      console.warn('⚠️ PIN token expiring in <10s, request may fail');
+    }
+    
+    if (passkeyToken && this.isPasskeyTokenExpiringSoon(10000)) {
       console.warn('⚠️ Passkey token expiring in <10s, request may fail');
     }
     
